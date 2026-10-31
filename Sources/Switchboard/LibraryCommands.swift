@@ -1,0 +1,113 @@
+import SwiftUI
+
+@MainActor
+final class LibraryWindowState: ObservableObject {
+    private let defaults: UserDefaults
+    @Published var scope: String { didSet { defaults.set(scope, forKey: "activeScope") } }
+    @Published var query: String { didSet { defaults.set(query, forKey: "activeSearch") } }
+    @Published var showInspector: Bool { didSet { defaults.set(showInspector, forKey: "showInspector") } }
+    @Published var selection: Set<UUID> {
+        didSet { defaults.set(selection.map(\.uuidString).sorted(), forKey: "selectedEntries") }
+    }
+    @Published var columnVisibility: NavigationSplitViewVisibility {
+        didSet {
+            let value = columnVisibility == .detailOnly ? "detailOnly" :
+                columnVisibility == .all ? "all" : columnVisibility == .doubleColumn ? "doubleColumn" : "automatic"
+            defaults.set(value, forKey: "sidebarVisibility")
+        }
+    }
+    @Published var showURL = false
+    @Published var showCollections = false
+    @Published var showSettings = false
+    @Published var searchPresented = false
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        scope = defaults.string(forKey: "activeScope") ?? "all"
+        query = defaults.string(forKey: "activeSearch") ?? ""
+        showInspector = defaults.object(forKey: "showInspector") as? Bool ?? true
+        selection = Set((defaults.stringArray(forKey: "selectedEntries") ?? []).compactMap(UUID.init(uuidString:)))
+        switch defaults.string(forKey: "sidebarVisibility") {
+        case "detailOnly": columnVisibility = .detailOnly
+        case "all": columnVisibility = .all
+        case "doubleColumn": columnVisibility = .doubleColumn
+        default: columnVisibility = .automatic
+        }
+    }
+
+    func validate(in data: LibraryData) {
+        let standardScopes = ["all", "favorites"] + EntryKind.allCases.map(\.rawValue)
+        if !standardScopes.contains(scope), !data.collections.contains(where: { $0.id.uuidString == scope }) { scope = "all" }
+        selection.formIntersection(Set(data.entries.map(\.id)))
+    }
+}
+
+struct LibraryCommands: Commands {
+    @ObservedObject var store: LibraryStore
+    @FocusedObject private var window: LibraryWindowState?
+    @AppStorage("minimalView") private var minimal = false
+    @AppStorage("hierarchicalCollections") private var hierarchical = false
+    @AppStorage("singleClickOpen") private var singleClick = false
+
+    private func binding<Value>(_ path: ReferenceWritableKeyPath<LibraryWindowState, Value>, fallback: Value) -> Binding<Value> {
+        Binding(get: { window?[keyPath: path] ?? fallback }, set: { window?[keyPath: path] = $0 })
+    }
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("Add Files and Folders…") {
+                store.importFiles(collectionID: window.flatMap { UUID(uuidString: $0.scope) })
+            }.keyboardShortcut("o").disabled(window == nil)
+            Button("Add URL…") { window?.showURL = true }.disabled(window == nil)
+            Divider()
+            Button("Manage Collections…") { window?.showCollections = true }.disabled(window == nil)
+        }
+        CommandGroup(after: .toolbar) {
+            Toggle("Minimal", isOn: $minimal)
+            Toggle("Show Details Panel", isOn: binding(\.showInspector, fallback: true)).disabled(window == nil)
+            Menu("Display Format") {
+                Picker("Display Format", selection: Binding(get: { store.data.view }, set: { store.data.view = $0; store.save() })) {
+                    ForEach(LibraryView.allCases) { Text($0.title).tag($0) }
+                }.pickerStyle(.inline)
+            }
+            Button("Configure Current View…") { window?.showSettings = true }.disabled(window == nil)
+            Menu("Appearance") {
+                Picker("Appearance", selection: Binding(get: { store.data.appearance }, set: { store.data.appearance = $0; store.save() })) {
+                    Text("System").tag("system")
+                    Text("Light").tag("light")
+                    Text("Dark").tag("dark")
+                }.pickerStyle(.inline)
+            }
+            Menu("Filter") {
+                Picker("Show", selection: binding(\.scope, fallback: "all")) {
+                    Text("All Entries").tag("all")
+                    Text("Favorites").tag("favorites")
+                    ForEach(EntryKind.allCases) { Text($0 == .url ? "URLs" : $0.title + "s").tag($0.rawValue) }
+                    Divider()
+                    ForEach(store.data.collections) {
+                        Text(LibraryLogic.collectionPath($0, in: store.data.collections)).tag($0.id.uuidString)
+                    }
+                }.pickerStyle(.inline)
+            }.disabled(window == nil)
+            Menu("Sort By") {
+                Picker("Sort By", selection: Binding(get: { store.data.sort }, set: { store.data.sort = $0; store.save() })) {
+                    ForEach(EntrySort.allCases) { Text($0.title).tag($0) }
+                }.pickerStyle(.inline)
+            }
+            Toggle("Hierarchical Collections", isOn: $hierarchical)
+            Menu("Open Items With") {
+                Picker("Open Items With", selection: $singleClick) {
+                    Text("Single Click").tag(true)
+                    Text("Double Click").tag(false)
+                }.pickerStyle(.inline)
+            }
+        }
+        CommandGroup(after: .textEditing) {
+            Button("Search Library…") {
+                minimal = false
+                window?.searchPresented = true
+            }.keyboardShortcut("f").disabled(window == nil)
+            Button("Clear Search") { window?.query = "" }.disabled(window?.query.isEmpty != false)
+        }
+    }
+}

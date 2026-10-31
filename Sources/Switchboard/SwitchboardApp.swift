@@ -1,0 +1,414 @@
+import SwiftUI
+import AppKit
+
+@main
+struct SwitchboardApp: App {
+    @StateObject private var store = LibraryStore()
+    var body: some Scene {
+        WindowGroup {
+            ContentView(store: store)
+                .frame(minWidth: 900, minHeight: 320)
+                .preferredColorScheme(store.data.appearance == "system" ? nil : store.data.appearance == "dark" ? .dark : .light)
+        }
+        .defaultSize(width: 1250, height: 790)
+        .commands { SidebarCommands(); LibraryCommands(store: store) }
+    }
+}
+
+extension Palette {
+    var color: Color {
+        switch self { case .ocean: .blue; case .violet: .purple; case .forest: .green; case .amber: .orange; case .graphite: .gray }
+    }
+}
+extension ViewConfiguration {
+    var font: Font { fontName == "System" ? .system(size: fontSize) : .custom(fontName, size: fontSize) }
+}
+
+struct ContentView: View {
+    @ObservedObject var store: LibraryStore
+    @AppStorage("minimalView") private var minimalView = false
+    @StateObject private var window = LibraryWindowState()
+    @AppStorage("hierarchicalCollections") private var hierarchical = false
+    @AppStorage("singleClickOpen") private var singleClick = false
+    @State private var removeIDs: Set<UUID> = []
+    @State private var dropTarget = false
+    var collectionID: UUID? { UUID(uuidString: window.scope) }
+    var title: String {
+        if let collectionID { return store.data.collections.first { $0.id == collectionID }?.name ?? "Collection" }
+        switch window.scope { case "favorites": return "Favorites"; case "file": return "Files"; case "folder": return "Folders"; case "url": return "URLs"; default: return "All entries" }
+    }
+    var currentCollection: LibraryCollection? { store.data.collections.first { $0.id == collectionID } }
+    var searching: Bool { !window.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var entries: [LibraryEntry] {
+        LibraryLogic.scopedEntries(store.data.entries, collections: store.data.collections, scope: window.scope,
+                                   hierarchical: hierarchical, query: window.query, sort: store.data.sort)
+    }
+    var searchMatches: [LibraryEntry] {
+        LibraryLogic.scopedEntries(store.data.entries, collections: store.data.collections, scope: window.scope,
+                                   hierarchical: false, query: window.query, sort: store.data.sort)
+    }
+    var childCollections: [LibraryCollection] {
+        guard hierarchical, !searching, window.scope == "all" || collectionID != nil else { return [] }
+        return store.data.collections.filter { $0.parentID == collectionID }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+    var body: some View {
+        NavigationSplitView(columnVisibility: $window.columnVisibility) { sidebar } detail: { detail }
+        .toolbar(minimalView ? .hidden : .automatic, for: .windowToolbar)
+        .focusedSceneObject(window)
+        .tint(store.configuration.palette.color)
+        .onChange(of: store.data.view) { _, _ in store.save() }
+        .onChange(of: store.data.sort) { _, _ in store.save() }
+        .onChange(of: window.scope) { _, _ in window.selection.removeAll() }
+        .onAppear { window.validate(in: store.data) }
+        .onChange(of: store.data.collections) { _, _ in window.validate(in: store.data) }
+        .onChange(of: store.data.entries.map(\.id)) { _, _ in window.validate(in: store.data) }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in store.save() }
+        .sheet(isPresented: $window.showURL) { AddURLSheet(store: store, collectionID: collectionID) { window.selection = [$0] } }
+        .sheet(isPresented: $window.showCollections) { CollectionManager(store: store) }
+        .sheet(isPresented: $window.showSettings) {
+            VStack {
+                ScrollView { ViewSettings(store: store) }
+                Button("Done") { window.showSettings = false }.keyboardShortcut(.defaultAction).padding()
+            }.frame(height: 650)
+        }
+        .alert("Remove from library?", isPresented: Binding(get: { !removeIDs.isEmpty }, set: { if !$0 { removeIDs = [] } })) {
+            Button("Cancel", role: .cancel) { removeIDs = [] }
+            Button("Remove", role: .destructive) { store.remove(removeIDs); window.selection.subtract(removeIDs); removeIDs = [] }
+        } message: { Text("Original files and folders will remain on disk.") }
+        .alert("Switchboard", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
+            Button("OK") { store.error = nil }
+        } message: { Text(store.error ?? "") }
+    }
+    private var sidebar: some View {
+            List(selection: $window.scope) {
+                Section("LIBRARY") {
+                    sidebarRow("All entries", icon: "square.stack.3d.up", value: "all", count: store.data.entries.count)
+                    sidebarRow("Favorites", icon: "star", value: "favorites", count: store.data.entries.filter(\.favorite).count)
+                }
+                Section("KINDS") {
+                    ForEach(EntryKind.allCases) { kind in
+                        sidebarRow(kind == .url ? "URLs" : kind.title + "s", icon: kind.icon, value: kind.rawValue,
+                                   count: store.data.entries.filter { $0.kind == kind }.count)
+                    }
+                }
+                Section {
+                    ForEach(store.data.collections) { collection in
+                        sidebarRow(LibraryLogic.collectionPath(collection, in: store.data.collections), icon: collection.symbol,
+                                   value: collection.id.uuidString, count: store.data.entries.filter { $0.collectionID == collection.id }.count)
+                            .listRowBackground(collection.palette?.color.opacity(0.18))
+                    }
+                    Button { window.showCollections = true } label: { Label("Manage collections…", systemImage: "folder.badge.gearshape") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                } header: { Text("COLLECTIONS") }
+            }
+            .listStyle(.sidebar)
+            .navigationTitle("Switchboard")
+            .navigationSplitViewColumnWidth(min: 185, ideal: 215, max: 300)
+            .safeAreaInset(edge: .bottom) {
+                if !minimalView {
+                    HStack { Image(systemName: "internaldrive"); Text("Stored on this Mac"); Spacer() }
+                        .font(.caption).foregroundStyle(.secondary).padding(16)
+                }
+            }
+    }
+    private var detailContent: some View {
+            VStack(spacing: 0) {
+                if !minimalView {
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(title).font(.system(size: 27, weight: .semibold))
+                            Text("\(entries.count) \(entries.count == 1 ? "entry" : "entries") · Your files, folders, and links in one place")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Menu {
+                            Picker("Sort by", selection: $store.data.sort) {
+                                ForEach(EntrySort.allCases) { Text($0.title).tag($0) }
+                            }
+                        } label: { Label("Sort", systemImage: "arrow.up.arrow.down") }
+                        .menuStyle(.borderlessButton).fixedSize()
+                    }.padding(24)
+                    Divider()
+                }
+                if hierarchical && !searching && (window.scope == "all" || collectionID != nil) {
+                    collectionNavigation
+                }
+                if entries.isEmpty && childCollections.isEmpty {
+                    ContentUnavailableView {
+                        Label(window.query.isEmpty ? "Your library starts here" : "No matching entries", systemImage: window.query.isEmpty ? "square.stack.3d.up" : "magnifyingglass")
+                    } description: {
+                        Text(window.query.isEmpty ? "Add files, folders, or URLs. You can also drop them here." : "Try a different search or collection.")
+                    } actions: {
+                        if window.query.isEmpty {
+                            Button("Add Files and Folders…") { store.importFiles(collectionID: collectionID) }
+                            Button("Add URL…") { window.showURL = true }
+                        } else { Button("Clear Search") { window.query = "" } }
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if store.data.view == .table { table }
+                else if store.data.view == .compactList || store.data.view == .comfortableList { list }
+                else { cards }
+                if !minimalView {
+                    Divider()
+                    HStack {
+                        Text(store.data.view.title)
+                        Spacer()
+                        if !window.selection.isEmpty { Text("\(window.selection.count) selected") }
+                        Text("Drop files, folders, or links to add")
+                    }.font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.vertical, 9)
+                }
+            }
+    }
+    private var detail: some View {
+        detailContent
+            .background(currentCollection?.palette?.color.opacity(0.12) ?? Color(nsColor: .controlBackgroundColor))
+            .overlay { if dropTarget { RoundedRectangle(cornerRadius: 8).stroke(store.configuration.palette.color, lineWidth: 3).padding(4).allowsHitTesting(false) } }
+            .dropDestination(for: URL.self) { urls, _ in
+                let valid: [URL] = urls.filter { url in url.isFileURL || LibraryLogic.webURL(url.absoluteString) != nil }
+                store.add(valid, collectionID: collectionID); return !valid.isEmpty
+            } isTargeted: { dropTarget = $0 }
+            .inspector(isPresented: $window.showInspector) {
+                if let id = window.selection.first, window.selection.count == 1,
+                   let entry = store.data.entries.first(where: { $0.id == id }) {
+                    EntryInspector(store: store, entry: entry, remove: { removeIDs = [entry.id] })
+                        .id(entry.id)
+                } else {
+                    ContentUnavailableView("Entry details", systemImage: "sidebar.right", description: Text("Select one entry to view and edit its details."))
+                }
+            }
+            .inspectorColumnWidth(min: 250, ideal: 285, max: 360)
+            .toolbar {
+                ToolbarItemGroup {
+                    Menu {
+                        Button("Files and Folders…") { store.importFiles(collectionID: collectionID) }
+                        Button("URL…") { window.showURL = true }
+                    } label: { Label("Add entry", systemImage: "plus") }.help("Add to library")
+                    Picker("View", selection: $store.data.view) {
+                        ForEach(LibraryView.allCases) { Label($0.title, systemImage: $0.icon).tag($0) }
+                    }.pickerStyle(.menu).frame(maxWidth: 170)
+                    Button { window.showSettings.toggle() } label: { Label("Configure view", systemImage: "slider.horizontal.3") }
+                    Button { window.showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.right") }
+                }
+            }
+            .searchable(text: $window.query, isPresented: $window.searchPresented, prompt: "Search names, tags, notes, and locations")
+            .searchSuggestions {
+                if searching {
+                    ForEach(searchMatches.prefix(12)) { entry in
+                        Button {
+                            store.open(entry)
+                            window.searchPresented = false
+                        } label: {
+                            Label { VStack(alignment: .leading) { Text(entry.name); Text(entry.location).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) } }
+                            icon: { Image(systemName: entry.kind.icon) }
+                        }
+                    }
+                }
+            }
+    }
+    var collectionNavigation: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let currentCollection {
+                HStack {
+                    Button { window.scope = currentCollection.parentID?.uuidString ?? "all" } label: { Label("Back", systemImage: "chevron.left") }
+                    Text(LibraryLogic.collectionPath(currentCollection, in: store.data.collections)).font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            if !childCollections.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 12) {
+                        ForEach(childCollections) { collection in
+                            Button { window.scope = collection.id.uuidString } label: {
+                                Label(collection.name, systemImage: collection.symbol)
+                                    .padding(12)
+                                    .background(collection.palette?.color.opacity(0.22) ?? Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }.padding(.horizontal, 24).padding(.top, 16)
+    }
+    func sidebarRow(_ name: String, icon: String, value: String, count: Int) -> some View {
+        HStack { Label(name, systemImage: icon); Spacer(); Text("\(count)").font(.caption).foregroundStyle(.tertiary) }.tag(value)
+    }
+    var cards: some View {
+        let thumbnails = store.data.view == .thumbnails
+        let width = thumbnails ? store.configuration.resolvedThumbnailSize : store.data.view.cardWidth
+        let spacing: CGFloat = thumbnails ? 8 : 16
+        return ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: width, maximum: thumbnails ? width : .infinity), spacing: spacing)],
+                      alignment: .leading, spacing: spacing) {
+                ForEach(entries) { entry in
+                    Group {
+                        if thumbnails {
+                            EntryThumbnail(entry: entry, configuration: store.configuration, selected: window.selection.contains(entry.id))
+                        } else {
+                            EntryTile(entry: entry, configuration: store.configuration, view: store.data.view, selected: window.selection.contains(entry.id))
+                        }
+                    }
+                        .contentShape(Rectangle())
+                        .entryHoverInfo(entry, collection: collectionName(for: entry))
+                        .gesture(TapGesture(count: singleClick ? 1 : 2).exclusively(before: TapGesture()).onEnded { action in
+                            select(entry.id)
+                            if case .first = action,
+                               NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty { store.open(entry) }
+                        })
+                        .contextMenu { entryMenu(entry) }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityLabel(entry.name)
+                        .accessibilityValue(window.selection.contains(entry.id) ? "Selected" : "")
+                        .accessibilityAction { window.selection = [entry.id]; if singleClick { store.open(entry) } }
+                }
+            }.padding(thumbnails ? 12 : 24)
+        }
+    }
+    var list: some View {
+        List(selection: $window.selection) {
+            ForEach(entries) { entry in
+                HStack(spacing: 14) {
+                    EntryIcon(kind: entry.kind, color: store.configuration.palette.color, size: store.data.view == .compactList ? 30 : 44)
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack { Text(entry.name).fontWeight(.medium).lineLimit(1); if entry.favorite { Image(systemName: "star.fill").foregroundStyle(.orange).font(.caption) } }
+                        EntryDetails(entry: entry, configuration: store.configuration)
+                    }
+                    Spacer(minLength: 0)
+                    if !singleClick {
+                        Button { store.open(entry) } label: { Image(systemName: "arrow.up.right") }.buttonStyle(.borderless).help("Open entry")
+                    }
+                }
+                .font(store.configuration.font)
+                .padding(.vertical, store.data.view == .compactList ? 2 : 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .entryHoverInfo(entry, collection: collectionName(for: entry))
+                .tag(entry.id)
+                .simultaneousGesture(TapGesture(count: 1).onEnded { openOnSingleClick(entry) })
+                .contextMenu { entryMenu(entry) }
+            }
+        }.listStyle(.inset)
+        .contextMenu(forSelectionType: UUID.self) { ids in
+            Button("Remove Selected…", role: .destructive) { removeIDs = ids }.disabled(ids.isEmpty)
+        } primaryAction: { ids in
+            if !singleClick || NSApp.currentEvent?.type == .keyDown {
+                for entry in entries where ids.contains(entry.id) { store.open(entry) }
+            }
+        }
+    }
+    func collectionName(for entry: LibraryEntry) -> String? {
+        store.data.collections.first { $0.id == entry.collectionID }?.name
+    }
+    func tableCell<Content: View>(_ entry: LibraryEntry, @ViewBuilder content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .entryHoverInfo(entry, collection: collectionName(for: entry))
+            .simultaneousGesture(TapGesture(count: 1).onEnded { openOnSingleClick(entry) })
+    }
+    var table: some View {
+        Table(entries, selection: $window.selection) {
+            TableColumn("Name") { entry in
+                tableCell(entry) {
+                    HStack { Image(systemName: entry.kind.icon).foregroundStyle(store.configuration.palette.color); Text(entry.name); if entry.favorite { Image(systemName: "star.fill").foregroundStyle(.orange) } }
+                }
+            }.width(min: 150, ideal: 220)
+            if store.configuration.fields.contains(.kind) {
+                TableColumn("Kind") { entry in tableCell(entry) { Text(entry.kind.title) } }.width(min: 60, ideal: 75)
+            }
+            if store.configuration.fields.contains(.location) {
+                TableColumn("Location") { entry in tableCell(entry) { Text(entry.location).foregroundStyle(.secondary) } }.width(min: 150, ideal: 300)
+            }
+            if store.configuration.fields.contains(.tags) {
+                TableColumn("Tags") { entry in tableCell(entry) { Text(entry.tags.joined(separator: ", ")) } }.width(min: 80, ideal: 130)
+            }
+            if store.configuration.fields.contains(.notes) {
+                TableColumn("Notes") { entry in tableCell(entry) { Text(entry.notes).lineLimit(2) } }.width(min: 100, ideal: 200)
+            }
+            if store.configuration.fields.contains(.added) {
+                TableColumn("Date added") { entry in tableCell(entry) { Text(entry.added, style: .date) } }.width(min: 90, ideal: 110)
+            }
+        }
+        .id(store.configuration.fields)
+        .font(store.configuration.font)
+        .contextMenu(forSelectionType: UUID.self) { ids in
+            if let entry = entries.first(where: { ids.contains($0.id) }), ids.count == 1 { entryMenu(entry) }
+            else { Button("Remove Selected…", role: .destructive) { removeIDs = ids }.disabled(ids.isEmpty) }
+        } primaryAction: { ids in
+            if !singleClick || NSApp.currentEvent?.type == .keyDown {
+                for entry in entries where ids.contains(entry.id) { store.open(entry) }
+            }
+        }
+    }
+    func openOnSingleClick(_ entry: LibraryEntry) {
+        if singleClick, NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty { store.open(entry) }
+    }
+    func select(_ id: UUID) {
+        if NSEvent.modifierFlags.contains(.command) {
+            if window.selection.contains(id) { window.selection.remove(id) } else { window.selection.insert(id) }
+        } else { window.selection = [id] }
+    }
+    @ViewBuilder func entryMenu(_ entry: LibraryEntry) -> some View {
+        Button("Open") { store.open(entry) }
+        if entry.kind != .url { Button("Show in Finder") { store.reveal(entry) } }
+        Button("Copy Location") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(entry.location, forType: .string) }
+        Button(entry.favorite ? "Remove from Favorites" : "Add to Favorites") { var updated = entry; updated.favorite.toggle(); store.update(updated) }
+        Menu("Move to Collection") {
+            if entry.collectionID != nil {
+                Button("Remove from Collection") { var updated = entry; updated.collectionID = nil; store.update(updated) }
+            }
+            ForEach(store.data.collections.filter { $0.id != entry.collectionID }) { collection in
+                Button(LibraryLogic.collectionPath(collection, in: store.data.collections)) { var updated = entry; updated.collectionID = collection.id; store.update(updated) }
+            }
+        }
+        Divider()
+        Button("Remove from Library…", role: .destructive) { removeIDs = [entry.id] }
+    }
+}
+
+struct EntryIcon: View {
+    var kind: EntryKind
+    var color: Color
+    var size: CGFloat
+    var body: some View {
+        Image(systemName: kind.icon).font(.system(size: size * 0.45, weight: .medium))
+            .foregroundStyle(color).frame(width: size, height: size)
+            .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: size * 0.24))
+    }
+}
+struct EntryDetails: View {
+    let entry: LibraryEntry
+    let configuration: ViewConfiguration
+    var body: some View {
+        Group {
+            if configuration.fields.contains(.kind) { Text(entry.kind.title).foregroundStyle(configuration.palette.color) }
+            if configuration.fields.contains(.location) { Text(entry.subtitle).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).help(entry.location) }
+            if configuration.fields.contains(.notes), !entry.notes.isEmpty { Text(entry.notes).foregroundStyle(.secondary).lineLimit(2) }
+            if configuration.fields.contains(.tags), !entry.tags.isEmpty {
+                Text(entry.tags.map { "#" + $0 }.joined(separator: "  ")).foregroundStyle(configuration.palette.color).lineLimit(1)
+            }
+            if configuration.fields.contains(.added) { Text(entry.added, style: .date).foregroundStyle(.tertiary) }
+        }.font(configuration.font)
+    }
+}
+struct EntryTile: View {
+    let entry: LibraryEntry
+    let configuration: ViewConfiguration
+    let view: LibraryView
+    let selected: Bool
+    var body: some View {
+        VStack(alignment: .leading, spacing: view == .smallCards ? 6 : 12) {
+            HStack(alignment: .top) {
+                EntryIcon(kind: entry.kind, color: configuration.palette.color, size: view == .smallCards ? 36 : view == .largeCards ? 60 : 48)
+                Spacer()
+                if entry.favorite { Image(systemName: "star.fill").font(.caption).foregroundStyle(.orange) }
+            }
+            Text(entry.name).font(configuration.font.weight(.semibold)).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: view == .smallCards ? 4 : 7) { EntryDetails(entry: entry, configuration: configuration) }
+            if view != .smallCards { Spacer(minLength: 0) }
+        }
+        .padding(view == .smallCards ? 10 : 20)
+        .frame(maxWidth: .infinity, minHeight: view == .smallCards ? 0 : view == .largeCards ? 250 : 205, alignment: .topLeading)
+        .background(selected ? configuration.palette.color.opacity(0.09) : Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+        .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? configuration.palette.color : Color.primary.opacity(0.09), lineWidth: selected ? 2 : 1) }
+    }
+}
