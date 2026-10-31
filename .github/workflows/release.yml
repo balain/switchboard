@@ -1,0 +1,120 @@
+name: Release macOS app
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_ARCH: ${{ matrix.arch }}
+      APP_BUILD_NUMBER: ${{ github.run_number }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate release version
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?$ ]]; then
+            echo "Expected a version tag such as v1.0.1 or v1.0.1-beta.1" >&2
+            exit 1
+          fi
+          echo "APP_VERSION=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+          swift --version
+
+      - name: Run tests
+        env:
+          CLANG_MODULE_CACHE_PATH: ${{ github.workspace }}/.build-cache/clang
+          SWIFT_MODULECACHE_PATH: ${{ github.workspace }}/.build-cache/swift
+        run: swift test --disable-sandbox --cache-path .build-cache
+
+      - name: Build and sign app
+        run: ./scripts/build-app.sh
+
+      - name: Verify and package app
+        run: |
+          app="dist/Switchboard.app"
+          actual_arch=$(lipo -archs "$app/Contents/MacOS/Switchboard")
+          test "$actual_arch" = "$RELEASE_ARCH"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" = "$APP_VERSION"
+          codesign --verify --deep --strict "$app"
+          archive="Switchboard-${RELEASE_TAG}-macOS-${RELEASE_ARCH}.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "dist/$archive"
+          (cd dist && shasum -a 256 "$archive" > "$archive.sha256")
+
+      - name: Upload release files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ matrix.arch }}
+          path: |
+            dist/Switchboard-*.zip
+            dist/Switchboard-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Download release files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+
+      - name: Verify checksums
+        working-directory: release
+        run: sha256sum --check ./*.sha256
+
+      - name: Create release and attach binaries
+        shell: bash
+        run: |
+          if is_draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' 2>/dev/null); then
+            gh release upload "$RELEASE_TAG" release/*.zip release/*.sha256 --clobber
+            if [[ "$is_draft" == "true" ]]; then
+              gh release edit "$RELEASE_TAG" --draft=false
+            fi
+          else
+            options=(--verify-tag --title "Switchboard $RELEASE_TAG" --generate-notes)
+            if [[ "$RELEASE_TAG" == *-* ]]; then
+              options+=(--prerelease)
+            fi
+            gh release create "$RELEASE_TAG" release/*.zip release/*.sha256 "${options[@]}"
+          fi

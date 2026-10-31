@@ -86,3 +86,22 @@ swift test --disable-sandbox --cache-path .build-cache
 Tests cover URL validation and HTML-title fetching, response-size limits, text-file previews, bookmarks, search and sorting, deduplication, persistence and unreadable-library protection, thumbnail sizing, restored view state, legacy settings, flat/hierarchical filtering, nesting cycle prevention, and safe collection removal. Fetch tests use mocked responses rather than live websites.
 
 The build script produces a locally ad-hoc-signed app; distribution to other Macs requires a Developer ID signing/notarization workflow. `.gitignore` covers common build outputs, machine-specific settings, signing files, and personal library exports.
+
+## Tagged releases
+
+`.github/workflows/release.yml` builds and tests the tagged source on Apple silicon and Intel macOS runners, then publishes a GitHub Release containing a ZIP of `Switchboard.app` for each architecture and SHA-256 checksums. Both builds must pass before publishing.
+
+Commit and push the workflow and build-script changes before creating a tag. In the repository's **Settings → Actions → General**, ensure GitHub Actions and the official `actions/checkout`, `actions/upload-artifact`, and `actions/download-artifact` actions are allowed. The workflow grants release publishing permission to the built-in `GITHUB_TOKEN`; no personal access token or repository secrets are needed for these ad-hoc-signed builds.
+
+Create and push a version tag on the commit you want to release:
+
+```sh
+git tag -a v1.0.1 -m "Switchboard 1.0.1"
+git push gh v1.0.1
+```
+
+`gh` is this checkout's remote name; use your remote's name (commonly `origin`) if different. Follow progress in the repository's **Actions** tab; completed downloads appear under **Releases**. Tags use `vMAJOR.MINOR.PATCH`; tags such as `v1.0.1-beta.1` create prereleases. The numeric portion sets the app version, and the workflow run number sets the build number. For a local versioned build, run `APP_VERSION=1.0.1 APP_BUILD_NUMBER=2 ./scripts/build-app.sh`.
+
+Downloads are named `Switchboard-v1.0.1-macOS-arm64.zip` for Apple silicon and `Switchboard-v1.0.1-macOS-x86_64.zip` for Intel. Extract the ZIP and move `Switchboard.app` to Applications. Releases retain the macOS 14.4 minimum requirement. These builds are ad-hoc signed, without Developer ID signing or Apple notarization, so downloaded apps may be blocked by Gatekeeper. Notarized public distribution requires a separate Apple Developer signing setup.
+
+Re-running a failed workflow can replace assets on an existing mutable release; immutable releases require a new version tag for changed binaries. Tags pointing to commits without this workflow do not trigger these builds.

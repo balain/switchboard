@@ -1,6 +1,12 @@
 #!/bin/zsh
 set -euo pipefail
 cd "${0:A:h:h}"
+app_version="${APP_VERSION:-1.0.0}"
+app_build="${APP_BUILD_NUMBER:-1}"
+if [[ ! "$app_version" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' || ! "$app_build" =~ '^[0-9]+$' ]]; then
+    print -u2 "APP_VERSION must be MAJOR.MINOR.PATCH and APP_BUILD_NUMBER must be numeric."
+    exit 1
+fi
 export CLANG_MODULE_CACHE_PATH="$PWD/.build-cache/clang"
 export SWIFT_MODULECACHE_PATH="$PWD/.build-cache/swift"
 swift build -c release --disable-sandbox --cache-path .build-cache -debug-info-format none
@@ -24,5 +30,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $app_version" "$APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $app_build" "$APP/Contents/Info.plist"
 codesign --force --deep --sign - "$APP"
 print "Built $APP"
