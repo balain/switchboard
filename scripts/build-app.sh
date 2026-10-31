@@ -13,6 +13,7 @@ swift build -c release --disable-sandbox --cache-path .build-cache -debug-info-f
 APP="$PWD/dist/Switchboard.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp LICENSE "$APP/Contents/Resources/LICENSE"
 cp .build/release/Switchboard "$APP/Contents/MacOS/Switchboard"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

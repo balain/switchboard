@@ -105,3 +105,11 @@ git push gh v1.0.1
 Downloads are named `Switchboard-v1.0.1-macOS-arm64.zip` for Apple silicon and `Switchboard-v1.0.1-macOS-x86_64.zip` for Intel. Extract the ZIP and move `Switchboard.app` to Applications. Releases retain the macOS 14.4 minimum requirement. These builds are ad-hoc signed, without Developer ID signing or Apple notarization, so downloaded apps may be blocked by Gatekeeper. Notarized public distribution requires a separate Apple Developer signing setup.
 
 Re-running a failed workflow can replace assets on an existing mutable release; immutable releases require a new version tag for changed binaries. Tags pointing to commits without this workflow do not trigger these builds.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, implementation guidelines, validation, and pull request expectations.
+
+## License
+
+Switchboard is licensed under the [MIT License](LICENSE). The license is also included in built application bundles.
