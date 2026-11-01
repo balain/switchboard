@@ -45,7 +45,7 @@ The toolbar provides adding entries, choosing a display format, configuring the 
 | Menu | Commands |
 | --- | --- |
 | File | Add Files and Folders… (Command-O), Add URL…, Manage Collections… |
-| View | Show/Hide Sidebar, Minimal, Show Details Panel, Display Format, Configure Current View…, Appearance, Filter, Sort By, Hierarchical Collections, Open Items With |
+| View | Show/Hide Sidebar, Minimal, Show Details Panel, Display Format, Configure Current View…, Appearance, Filter, Sort By, Hierarchical Collections, Show Collection Names, Open Items With |
 | Edit | Search Library… (Command-F), Clear Search |
 
 **Filter** selects all entries, favorites, files, folders, URLs, or a specific collection. **Sort By** offers name, newest first, or kind. **Appearance** offers System, Light, or Dark.
@@ -59,6 +59,8 @@ Single-click or double-click opening applies to entries in every display format.
 Open **File → Manage Collections…** or **Manage collections…** in the sidebar to add, rename, delete, or choose a collection's icon, background color, and parent collection. Save edits with **Save Changes** or **Done**; changing the selected collection also saves the previous collection's edits. Nesting cycles are prevented.
 
 The toolbar’s **Collections** dropdown and **View → Collections** let you select a collection, return to **All Entries**, or open **Manage Collections…**. Collection selection keeps your current search and tag filters.
+
+**View → Show Collection Names** shows or hides the collection navigation buttons in the main content area. This preference is saved between launches. The sidebar, Collections menu, and current collection’s Back button remain available.
 
 With **Hierarchical Collections** enabled, All Entries shows top-level collections as folders alongside unassigned entries. Opening a collection shows its direct entries and subcollections; **Back** returns to its parent. With hierarchical display disabled, All Entries shows every item, and selecting a collection shows its entries and all descendant collections' entries together. Collections can also be selected through the sidebar or **View → Filter**.
 

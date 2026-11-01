@@ -7,7 +7,7 @@ struct SwitchboardApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(store: store)
-                .frame(minWidth: 900, minHeight: 320)
+                .frame(minWidth: 900, minHeight: 320.0 / 3.0)
                 .preferredColorScheme(store.data.appearance == "system" ? nil : store.data.appearance == "dark" ? .dark : .light)
         }
         .defaultSize(width: 1250, height: 790)
@@ -29,6 +29,7 @@ struct ContentView: View {
     @AppStorage("minimalView") private var minimalView = false
     @StateObject private var window = LibraryWindowState()
     @AppStorage("hierarchicalCollections") private var hierarchical = false
+    @AppStorage("showCollectionNames") private var showCollectionNames = true
     @AppStorage("singleClickOpen") private var singleClick = false
     @State private var removeIDs: Set<UUID> = []
     @State private var dropTarget = false
@@ -173,10 +174,18 @@ struct ContentView: View {
                     }.font(.callout).padding(.horizontal, 24).padding(.vertical, 10)
                     Divider()
                 }
-                if hierarchical && !searching && (window.scope == "all" || collectionID != nil) {
+                if hierarchical && !searching && (currentCollection != nil || (showCollectionNames && !childCollections.isEmpty)) {
                     collectionNavigation
                 }
-                if entries.isEmpty && childCollections.isEmpty {
+                if entries.isEmpty && !showCollectionNames && !childCollections.isEmpty {
+                    ContentUnavailableView {
+                        Label("No entries here", systemImage: "folder")
+                    } description: {
+                        Text("Collection navigation is hidden. Choose a collection from the sidebar or Collections menu.")
+                    } actions: {
+                        Button("Show Collection Names") { showCollectionNames = true }
+                    }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if entries.isEmpty && childCollections.isEmpty {
                     ContentUnavailableView {
                         Label(!searching ? "Your library starts here" : "No matching entries", systemImage: !searching ? "square.stack.3d.up" : "magnifyingglass")
                     } description: {
@@ -258,7 +267,7 @@ struct ContentView: View {
                     Text(LibraryLogic.collectionPath(currentCollection, in: store.data.collections)).font(.callout).foregroundStyle(.secondary)
                 }
             }
-            if !childCollections.isEmpty {
+            if showCollectionNames && !childCollections.isEmpty {
                 ScrollView(.horizontal) {
                     HStack(spacing: 12) {
                         ForEach(childCollections) { collection in

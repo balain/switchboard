@@ -57,6 +57,7 @@ struct LibraryCommands: Commands {
     @FocusedObject private var window: LibraryWindowState?
     @AppStorage("minimalView") private var minimal = false
     @AppStorage("hierarchicalCollections") private var hierarchical = false
+    @AppStorage("showCollectionNames") private var showCollectionNames = true
     @AppStorage("singleClickOpen") private var singleClick = false
 
     private func binding<Value>(_ path: ReferenceWritableKeyPath<LibraryWindowState, Value>, fallback: Value) -> Binding<Value> {
@@ -112,6 +113,7 @@ struct LibraryCommands: Commands {
                 }.pickerStyle(.inline)
             }
             Toggle("Hierarchical Collections", isOn: $hierarchical)
+            Toggle("Show Collection Names", isOn: $showCollectionNames)
             Menu("Open Items With") {
                 Picker("Open Items With", selection: $singleClick) {
                     Text("Single Click").tag(true)
