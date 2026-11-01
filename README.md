@@ -121,6 +121,8 @@ Re-running a failed workflow can replace assets on an existing mutable release; 
 
 ## Contributing
 
+Proposed feature work is documented in the [implementation plans](docs/plans/README.md), covering smart collections, a quick launcher, bulk organization, library health, content search, import/export/backups, organization rules, and Minimal-mode icon bloom.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, implementation guidelines, validation, and pull request expectations.
 
 ## License
