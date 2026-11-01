@@ -99,6 +99,21 @@ struct EntryInspector: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Tags").font(.caption).foregroundStyle(.secondary)
                     TextField("design, work, reading", text: $tags).textFieldStyle(.roundedBorder).onSubmit { save() }
+                    if !store.data.tags.isEmpty {
+                        Menu("Choose Tags") {
+                            ForEach(store.data.tags.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { tag in
+                                Toggle(tag.name, isOn: Binding(get: {
+                                    tags.split(separator: ",").contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare(tag.name) == .orderedSame }
+                                }, set: { enabled in
+                                    var names = tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                                    names.removeAll { $0.caseInsensitiveCompare(tag.name) == .orderedSame }
+                                    if enabled { names.append(tag.name) }
+                                    tags = names.joined(separator: ", ")
+                                    save()
+                                }))
+                            }
+                        }
+                    }
                     Text("Separate tags with commas.").font(.caption2).foregroundStyle(.tertiary)
                 }
                 VStack(alignment: .leading, spacing: 6) {
@@ -116,6 +131,7 @@ struct EntryInspector: View {
                 Text("Display names and collections organize your library. Original files stay in place.").font(.caption).foregroundStyle(.tertiary)
             }.padding(22)
         }
+        .onChange(of: entry.tags) { _, value in tags = value.joined(separator: ", ") }
         .onChange(of: entry.collectionID) { _, value in collectionID = value }
         .onAppear {
             name = entry.name; notes = entry.notes; tags = entry.tags.joined(separator: ", ")

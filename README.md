@@ -19,12 +19,13 @@ You can also open `Package.swift` in Xcode and run the Switchboard scheme.
 - View → Appearance selects System, Light, or Dark; the choice is saved across launches.
 - Files and folders through the native picker, and file/URL drag and drop.
 - URL validation, duplicate prevention, collections, favorites, tags, and notes.
-- Search names, locations, tags, and notes; sort by name, kind, or newest.
+- Search names, locations, tags, and notes; filter by one or more tags (match any or all); sort by name, kind, or newest.
 - Entry inspector, multiselection (Command-click cards), and context menus.
 - Hover over cards, list rows, or table rows for item details; small cards size to their visible content.
 - File hover popups include a text excerpt or a Quick Look content thumbnail for supported images and documents, with details retained when a preview is unavailable.
 - View → Minimal hides the window toolbar, library heading and subtitle, and status bars; the setting is remembered.
 - System menus provide display formats, filters, sorting, view configuration, sidebar/details visibility, and search (Command-F).
+- File → Manage Tags opens a dialog for adding, renaming, coloring, and deleting tags and choosing icons.
 - File → Manage Collections opens a dialog for adding, renaming, nesting, coloring, and deleting collections and choosing icons.
 - View → Hierarchical Collections browses collections as folders. Flat mode shows all items in the selected collection and its descendants together.
 - Search filters immediately and offers matching items below the search field; choosing a suggestion opens the item directly.
@@ -57,9 +58,19 @@ Single-click or double-click opening applies to entries in every display format.
 
 Open **File → Manage Collections…** or **Manage collections…** in the sidebar to add, rename, delete, or choose a collection's icon, background color, and parent collection. Save edits with **Save Changes** or **Done**; changing the selected collection also saves the previous collection's edits. Nesting cycles are prevented.
 
+The toolbar’s **Collections** dropdown and **View → Collections** let you select a collection, return to **All Entries**, or open **Manage Collections…**. Collection selection keeps your current search and tag filters.
+
 With **Hierarchical Collections** enabled, All Entries shows top-level collections as folders alongside unassigned entries. Opening a collection shows its direct entries and subcollections; **Back** returns to its parent. With hierarchical display disabled, All Entries shows every item, and selecting a collection shows its entries and all descendant collections' entries together. Collections can also be selected through the sidebar or **View → Filter**.
 
 An entry belongs to at most one collection. Its **Move to Collection** context menu omits the current collection and offers **Remove from Collection** when assigned. Deleting a collection keeps its entries in the library and moves its subcollections up to the deleted collection's parent.
+
+## Tags
+
+Open **File → Manage Tags…** or **Manage tags…** in the sidebar to add, rename, delete, or choose a tag’s icon and background color. Save with **Save Changes** or **Done**; selecting another tag also saves valid edits. Names must be unique (ignoring case) and cannot contain commas. Renaming updates every tagged entry; deleting removes the tag from entries without removing the entries. Existing entry tags automatically populate the tag catalog, and unused tags remain available.
+
+Select tag checkboxes in the sidebar, the toolbar’s tag menu, or **View → Tags**. Choose **Match any tag** or **Match all tags** to combine selections. Tag filters combine with the current collection, kind, favorites, and search, including descendant collections in hierarchical mode. **Clear Tag Filters** removes only tag selections. Active tag filters and match mode restore on relaunch.
+
+In the details panel, use **Choose Tags** to assign existing tags, or type comma-separated names to create tags when saving details.
 
 ## Search and URL entry
 
@@ -69,11 +80,11 @@ Opening **Add URL** checks the clipboard for a single web address. If present, t
 
 ## Saving and previews
 
-In the details panel, **Save Details** saves the display name, URL, tags, and notes. The display name, URL, and tags fields also save on Return; changing collection or favorite status saves the current details. Tags are comma-separated and duplicates are removed.
+In the details panel, **Save Details** saves the display name, URL, tags, and notes. The display name, URL, and tags fields also save on Return; changing collection or favorite status saves the current details. Tags are comma-separated; whitespace and duplicates are removed, ignoring case.
 
 Hover over a thumbnail, card, list row, or table row for its name, location, kind, collection, tags, notes, and date added. File popups additionally show a short text excerpt or a Quick Look thumbnail when supported. Thumbnail display uses file previews with file-icon fallbacks; folders and URLs use icons.
 
-Library entries, collections, display format, sorting, appearance, and per-view configurations save locally in `~/Library/Application Support/Switchboard/library.json`. Active filters, search text, selection, panel visibility, Minimal mode, hierarchical display, and click behavior are restored using macOS preferences. Temporary dialogs do not reopen on launch. If the saved library cannot be read, the app reports the problem and disables saving to protect the existing file.
+Library entries, collections, tags, display format, sorting, appearance, and per-view configurations save locally in `~/Library/Application Support/Switchboard/library.json`. Active filters, search text, selection, panel visibility, Minimal mode, hierarchical display, and click behavior are restored using macOS preferences. Temporary dialogs do not reopen on launch. If the saved library cannot be read, the app reports the problem and disables saving to protect the existing file.
 
 ## Validation
 
@@ -83,7 +94,7 @@ SWIFT_MODULECACHE_PATH="$PWD/.build-cache/swift" \
 swift test --disable-sandbox --cache-path .build-cache
 ```
 
-Tests cover URL validation and HTML-title fetching, response-size limits, text-file previews, bookmarks, search and sorting, deduplication, persistence and unreadable-library protection, thumbnail sizing, restored view state, legacy settings, flat/hierarchical filtering, nesting cycle prevention, and safe collection removal. Fetch tests use mocked responses rather than live websites.
+Tests cover URL validation and HTML-title fetching, response-size limits, text-file previews, bookmarks, search and sorting, deduplication, persistence and unreadable-library protection, thumbnail sizing, restored view state, legacy settings, flat/hierarchical filtering, nesting cycle prevention, safe collection removal, tag migration and management, and combined any/all tag filtering. Fetch tests use mocked responses rather than live websites.
 
 The build script produces a locally ad-hoc-signed app; distribution to other Macs requires a Developer ID signing/notarization workflow. `.gitignore` covers common build outputs, machine-specific settings, signing files, and personal library exports.
 

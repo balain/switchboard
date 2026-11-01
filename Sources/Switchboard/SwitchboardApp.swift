@@ -38,14 +38,19 @@ struct ContentView: View {
         switch window.scope { case "favorites": return "Favorites"; case "file": return "Files"; case "folder": return "Folders"; case "url": return "URLs"; default: return "All entries" }
     }
     var currentCollection: LibraryCollection? { store.data.collections.first { $0.id == collectionID } }
-    var searching: Bool { !window.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    var selectedTagNames: Set<String> {
+        Set(store.data.tags.filter { window.selectedTags.contains($0.id) }.map(\.name))
+    }
+    var searching: Bool { !window.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !window.selectedTags.isEmpty }
     var entries: [LibraryEntry] {
         LibraryLogic.scopedEntries(store.data.entries, collections: store.data.collections, scope: window.scope,
-                                   hierarchical: hierarchical, query: window.query, sort: store.data.sort)
+                                   hierarchical: hierarchical, query: window.query, sort: store.data.sort,
+                                   tags: selectedTagNames, tagMatch: window.tagMatch)
     }
     var searchMatches: [LibraryEntry] {
         LibraryLogic.scopedEntries(store.data.entries, collections: store.data.collections, scope: window.scope,
-                                   hierarchical: false, query: window.query, sort: store.data.sort)
+                                   hierarchical: false, query: window.query, sort: store.data.sort,
+                                   tags: selectedTagNames, tagMatch: window.tagMatch)
     }
     var childCollections: [LibraryCollection] {
         guard hierarchical, !searching, window.scope == "all" || collectionID != nil else { return [] }
@@ -61,11 +66,15 @@ struct ContentView: View {
         .onChange(of: store.data.sort) { _, _ in store.save() }
         .onChange(of: window.scope) { _, _ in window.selection.removeAll() }
         .onAppear { window.validate(in: store.data) }
+        .onChange(of: store.data.tags) { _, _ in window.validate(in: store.data) }
+        .onChange(of: window.selectedTags) { _, _ in window.selection.removeAll() }
+        .onChange(of: window.tagMatch) { _, _ in window.selection.removeAll() }
         .onChange(of: store.data.collections) { _, _ in window.validate(in: store.data) }
         .onChange(of: store.data.entries.map(\.id)) { _, _ in window.validate(in: store.data) }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in store.save() }
         .sheet(isPresented: $window.showURL) { AddURLSheet(store: store, collectionID: collectionID) { window.selection = [$0] } }
         .sheet(isPresented: $window.showCollections) { CollectionManager(store: store) }
+        .sheet(isPresented: $window.showTags) { TagManager(store: store) }
         .sheet(isPresented: $window.showSettings) {
             VStack {
                 ScrollView { ViewSettings(store: store) }
@@ -101,6 +110,29 @@ struct ContentView: View {
                     Button { window.showCollections = true } label: { Label("Manage collections…", systemImage: "folder.badge.gearshape") }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 } header: { Text("COLLECTIONS") }
+                Section {
+                    ForEach(store.data.tags.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { tag in
+                        Toggle(isOn: Binding(get: { window.selectedTags.contains(tag.id) }, set: { enabled in
+                            if enabled { window.selectedTags.insert(tag.id) } else { window.selectedTags.remove(tag.id) }
+                        })) {
+                            HStack {
+                                Label(tag.name, systemImage: tag.symbol)
+                                Spacer()
+                                Text("\(store.data.entries.filter { $0.tags.contains(tag.name) }.count)")
+                                    .font(.caption).foregroundStyle(.tertiary)
+                            }
+                        }.toggleStyle(.checkbox)
+                            .listRowBackground(tag.palette?.color.opacity(0.18))
+                    }
+                    if !window.selectedTags.isEmpty {
+                        Picker("Match", selection: $window.tagMatch) {
+                            ForEach(TagMatch.allCases) { Text($0.title).tag($0) }
+                        }
+                        Button("Clear Tag Filters") { window.selectedTags.removeAll() }.buttonStyle(.plain)
+                    }
+                    Button { window.showTags = true } label: { Label("Manage tags…", systemImage: "tag") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                } header: { Text("TAGS") }
             }
             .listStyle(.sidebar)
             .navigationTitle("Switchboard")
@@ -131,19 +163,29 @@ struct ContentView: View {
                     }.padding(24)
                     Divider()
                 }
+                if !window.selectedTags.isEmpty {
+                    HStack {
+                        Label("\(window.selectedTags.count) \(window.selectedTags.count == 1 ? "tag filter" : "tag filters") · \(window.tagMatch.title)", systemImage: "line.3.horizontal.decrease.circle")
+                        Spacer()
+                        Menu("Tags") { TagFilterMenu(store: store, window: window) }
+                            .menuStyle(.borderlessButton).fixedSize()
+                        Button("Clear") { window.selectedTags.removeAll() }
+                    }.font(.callout).padding(.horizontal, 24).padding(.vertical, 10)
+                    Divider()
+                }
                 if hierarchical && !searching && (window.scope == "all" || collectionID != nil) {
                     collectionNavigation
                 }
                 if entries.isEmpty && childCollections.isEmpty {
                     ContentUnavailableView {
-                        Label(window.query.isEmpty ? "Your library starts here" : "No matching entries", systemImage: window.query.isEmpty ? "square.stack.3d.up" : "magnifyingglass")
+                        Label(!searching ? "Your library starts here" : "No matching entries", systemImage: !searching ? "square.stack.3d.up" : "magnifyingglass")
                     } description: {
-                        Text(window.query.isEmpty ? "Add files, folders, or URLs. You can also drop them here." : "Try a different search or collection.")
+                        Text(!searching ? "Add files, folders, or URLs. You can also drop them here." : "Try a different search, tag filter, or collection.")
                     } actions: {
-                        if window.query.isEmpty {
+                        if !searching {
                             Button("Add Files and Folders…") { store.importFiles(collectionID: collectionID) }
                             Button("Add URL…") { window.showURL = true }
-                        } else { Button("Clear Search") { window.query = "" } }
+                        } else { Button("Clear Search and Tags") { window.query = ""; window.selectedTags.removeAll() } }
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if store.data.view == .table { table }
                 else if store.data.view == .compactList || store.data.view == .comfortableList { list }
@@ -186,6 +228,9 @@ struct ContentView: View {
                     Picker("View", selection: $store.data.view) {
                         ForEach(LibraryView.allCases) { Label($0.title, systemImage: $0.icon).tag($0) }
                     }.pickerStyle(.menu).frame(maxWidth: 170)
+                    Menu { CollectionFilterMenu(store: store, window: window) } label: { Label("Collections", systemImage: "folder") }
+                        .help("Select or manage collections")
+                    Menu { TagFilterMenu(store: store, window: window) } label: { Label("Filter by tags", systemImage: "tag") }
                     Button { window.showSettings.toggle() } label: { Label("Configure view", systemImage: "slider.horizontal.3") }
                     Button { window.showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.right") }
                 }

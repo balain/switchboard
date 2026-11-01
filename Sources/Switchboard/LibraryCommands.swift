@@ -16,6 +16,13 @@ final class LibraryWindowState: ObservableObject {
             defaults.set(value, forKey: "sidebarVisibility")
         }
     }
+    @Published var selectedTags: Set<UUID> {
+        didSet { defaults.set(selectedTags.map(\.uuidString).sorted(), forKey: "selectedTags") }
+    }
+    @Published var tagMatch: TagMatch {
+        didSet { defaults.set(tagMatch.rawValue, forKey: "tagMatch") }
+    }
+    @Published var showTags = false
     @Published var showURL = false
     @Published var showCollections = false
     @Published var showSettings = false
@@ -23,6 +30,8 @@ final class LibraryWindowState: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        selectedTags = Set((defaults.stringArray(forKey: "selectedTags") ?? []).compactMap(UUID.init(uuidString:)))
+        tagMatch = TagMatch(rawValue: defaults.string(forKey: "tagMatch") ?? "") ?? .any
         scope = defaults.string(forKey: "activeScope") ?? "all"
         query = defaults.string(forKey: "activeSearch") ?? ""
         showInspector = defaults.object(forKey: "showInspector") as? Bool ?? true
@@ -38,6 +47,7 @@ final class LibraryWindowState: ObservableObject {
     func validate(in data: LibraryData) {
         let standardScopes = ["all", "favorites"] + EntryKind.allCases.map(\.rawValue)
         if !standardScopes.contains(scope), !data.collections.contains(where: { $0.id.uuidString == scope }) { scope = "all" }
+        selectedTags.formIntersection(Set(data.tags.map(\.id)))
         selection.formIntersection(Set(data.entries.map(\.id)))
     }
 }
@@ -61,6 +71,7 @@ struct LibraryCommands: Commands {
             Button("Add URL…") { window?.showURL = true }.disabled(window == nil)
             Divider()
             Button("Manage Collections…") { window?.showCollections = true }.disabled(window == nil)
+            Button("Manage Tags…") { window?.showTags = true }.disabled(window == nil)
         }
         CommandGroup(after: .toolbar) {
             Toggle("Minimal", isOn: $minimal)
@@ -88,6 +99,12 @@ struct LibraryCommands: Commands {
                         Text(LibraryLogic.collectionPath($0, in: store.data.collections)).tag($0.id.uuidString)
                     }
                 }.pickerStyle(.inline)
+            }.disabled(window == nil)
+            Menu("Collections") {
+                if let window { CollectionFilterMenu(store: store, window: window) }
+            }.disabled(window == nil)
+            Menu("Tags") {
+                if let window { TagFilterMenu(store: store, window: window) }
             }.disabled(window == nil)
             Menu("Sort By") {
                 Picker("Sort By", selection: Binding(get: { store.data.sort }, set: { store.data.sort = $0; store.save() })) {

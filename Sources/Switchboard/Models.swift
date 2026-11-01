@@ -34,6 +34,20 @@ struct LibraryCollection: Identifiable, Codable, Hashable {
     var palette: Palette?
     var symbol: String { icon ?? "folder.fill" }
 }
+struct LibraryTag: Identifiable, Codable, Hashable {
+    var id = UUID()
+    var name: String
+    var icon: String?
+    var palette: Palette?
+    var symbol: String { icon ?? "tag.fill" }
+}
+
+enum TagMatch: String, CaseIterable, Identifiable {
+    case any, all
+    var id: String { rawValue }
+    var title: String { self == .any ? "Match any tag" : "Match all tags" }
+}
+
 enum LibraryView: String, Codable, CaseIterable, Identifiable {
     case thumbnails, smallCards, mediumCards, largeCards, compactList, comfortableList, table
     var id: String { rawValue }
@@ -90,18 +104,36 @@ enum EntrySort: String, CaseIterable, Codable, Identifiable {
 struct LibraryData: Codable {
     var entries: [LibraryEntry] = []
     var collections: [LibraryCollection] = []
+    var tags: [LibraryTag] = []
     var view: LibraryView = .mediumCards
     var configurations: [String: ViewConfiguration] = [:]
     var sort: EntrySort = .name
     var appearance = "system"
+
+    init() { }
+    private enum CodingKeys: String, CodingKey {
+        case entries, collections, tags, view, configurations, sort, appearance
+    }
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        entries = try values.decode([LibraryEntry].self, forKey: .entries)
+        collections = try values.decode([LibraryCollection].self, forKey: .collections)
+        tags = try values.decodeIfPresent([LibraryTag].self, forKey: .tags) ?? []
+        view = try values.decode(LibraryView.self, forKey: .view)
+        configurations = try values.decode([String: ViewConfiguration].self, forKey: .configurations)
+        sort = try values.decode(EntrySort.self, forKey: .sort)
+        appearance = try values.decode(String.self, forKey: .appearance)
+    }
+
 }
 
 enum LibraryLogic {
     static func scopedEntries(_ entries: [LibraryEntry], collections: [LibraryCollection], scope: String,
-                              hierarchical: Bool, query: String, sort: EntrySort) -> [LibraryEntry] {
+                              hierarchical: Bool, query: String, sort: EntrySort,
+                              tags: Set<String> = [], tagMatch: TagMatch = .any) -> [LibraryEntry] {
         let collectionID = UUID(uuidString: scope)
         let collectionIDs = collectionID.map { descendants(of: $0, in: collections) } ?? []
-        let searching = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let searching = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !tags.isEmpty
         let scoped = entries.filter { entry in
             if let collectionID {
                 if hierarchical && !searching { return entry.collectionID == collectionID }
@@ -111,7 +143,12 @@ enum LibraryLogic {
             if let kind = EntryKind(rawValue: scope) { return entry.kind == kind }
             return !hierarchical || searching || entry.collectionID == nil
         }
-        return filtered(scoped, query: query, sort: sort)
+        let tagged = scoped.filter { entry in
+            guard !tags.isEmpty else { return true }
+            let matches = tags.map { tag in entry.tags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame } }
+            return tagMatch == .all ? matches.allSatisfy { $0 } : matches.contains(true)
+        }
+        return filtered(tagged, query: query, sort: sort)
     }
 
     static func descendants(of id: UUID, in collections: [LibraryCollection]) -> Set<UUID> {

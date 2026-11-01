@@ -16,6 +16,7 @@ final class LibraryStore: ObservableObject {
             if FileManager.default.fileExists(atPath: self.storageURL.path) {
                 data = try JSONDecoder().decode(LibraryData.self, from: Data(contentsOf: self.storageURL))
             }
+            registerEntryTags()
         } catch { canSave = false; self.error = "Could not read the library: \(error.localizedDescription). Your saved library has not been changed." }
     }
     func save() {
@@ -59,7 +60,7 @@ final class LibraryStore: ObservableObject {
     }
     func update(_ entry: LibraryEntry) {
         guard let index = data.entries.firstIndex(where: { $0.id == entry.id }) else { return }
-        data.entries[index] = entry; save()
+        data.entries[index] = entry; registerEntryTags(); save()
     }
     func remove(_ ids: Set<UUID>) { data.entries.removeAll { ids.contains($0.id) }; save() }
     func resolve(_ entry: LibraryEntry) -> URL? {
@@ -87,6 +88,55 @@ final class LibraryStore: ObservableObject {
         guard let url = resolve(entry), url.isFileURL else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
+    // Preserve existing entry tags while giving every tag a stable identity.
+    private func registerEntryTags() {
+        for index in data.entries.indices {
+            var names: [String] = []
+            for raw in data.entries[index].tags {
+                let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { continue }
+                let id = addTag(name, persist: false)
+                guard let canonical = data.tags.first(where: { $0.id == id })?.name else { continue }
+                if !names.contains(canonical) { names.append(canonical) }
+            }
+            data.entries[index].tags = names
+        }
+    }
+    @discardableResult
+    func addTag(_ raw: String, persist: Bool = true) -> UUID? {
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, !name.contains(",") else { return nil }
+        if let existing = data.tags.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) { return existing.id }
+        let tag = LibraryTag(name: name)
+        data.tags.append(tag)
+        if persist { save() }
+        return tag.id
+    }
+    func updateTag(_ tag: LibraryTag) -> Bool {
+        guard let index = data.tags.firstIndex(where: { $0.id == tag.id }) else { return false }
+        var updated = tag
+        updated.name = tag.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !updated.name.isEmpty, !updated.name.contains(","),
+              !data.tags.contains(where: { $0.id != tag.id && $0.name.caseInsensitiveCompare(updated.name) == .orderedSame }) else { return false }
+        let oldName = data.tags[index].name
+        data.tags[index] = updated
+        for index in data.entries.indices {
+            data.entries[index].tags = data.entries[index].tags.map {
+                $0.caseInsensitiveCompare(oldName) == .orderedSame ? updated.name : $0
+            }
+        }
+        save()
+        return true
+    }
+    func removeTag(_ id: UUID) {
+        guard let tag = data.tags.first(where: { $0.id == id }) else { return }
+        for index in data.entries.indices {
+            data.entries[index].tags.removeAll { $0.caseInsensitiveCompare(tag.name) == .orderedSame }
+        }
+        data.tags.removeAll { $0.id == id }
+        save()
+    }
+
     func addCollection(_ name: String) -> UUID {
         let collection = LibraryCollection(name: name)
         data.collections.append(collection); save(); return collection.id
