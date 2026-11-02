@@ -27,6 +27,7 @@ extension ViewConfiguration {
 struct ContentView: View {
     @ObservedObject var store: LibraryStore
     @AppStorage("minimalView") private var minimalView = false
+    @AppStorage("minimalIconBloom") private var minimalIconBloom = true
     @StateObject private var window = LibraryWindowState()
     @AppStorage("hierarchicalCollections") private var hierarchical = false
     @AppStorage("showCollectionNames") private var showCollectionNames = true
@@ -196,7 +197,8 @@ struct ContentView: View {
                             Button("Add URL…") { window.showURL = true }
                         } else { Button("Clear Search and Tags") { window.query = ""; window.selectedTags.removeAll() } }
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if store.data.view == .table { table }
+                } else if minimalView && minimalIconBloom { minimalIcons }
+                else if store.data.view == .table { table }
                 else if store.data.view == .compactList || store.data.view == .comfortableList { list }
                 else { cards }
                 if !minimalView {
@@ -293,29 +295,41 @@ struct ContentView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: width, maximum: thumbnails ? width : .infinity), spacing: spacing)],
                       alignment: .leading, spacing: spacing) {
                 ForEach(entries) { entry in
-                    Group {
+                    entryInteraction(entry) {
                         if thumbnails {
                             EntryThumbnail(entry: entry, configuration: store.configuration, selected: window.selection.contains(entry.id))
                         } else {
                             EntryTile(entry: entry, configuration: store.configuration, view: store.data.view, selected: window.selection.contains(entry.id))
                         }
                     }
-                        .contentShape(Rectangle())
-                        .entryHoverInfo(entry, collection: collectionName(for: entry))
-                        .gesture(TapGesture(count: singleClick ? 1 : 2).exclusively(before: TapGesture()).onEnded { action in
-                            select(entry.id)
-                            if case .first = action,
-                               NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty { store.open(entry) }
-                        })
-                        .contextMenu { entryMenu(entry) }
-                        .accessibilityElement(children: .combine)
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityLabel(entry.name)
-                        .accessibilityValue(window.selection.contains(entry.id) ? "Selected" : "")
-                        .accessibilityAction { window.selection = [entry.id]; if singleClick { store.open(entry) } }
                 }
             }.padding(thumbnails ? 12 : 24)
         }
+    }
+    var minimalIcons: some View {
+        MinimalIconView(entries: entries, configuration: store.configuration, selection: $window.selection,
+                        interactionSuspended: dropTarget, activate: { store.open($0) }) { entry, size in
+            entryInteraction(entry) {
+                EntryThumbnail(entry: entry, configuration: store.configuration,
+                               selected: window.selection.contains(entry.id), displaySize: size)
+            }
+        }
+    }
+    func entryInteraction<Content: View>(_ entry: LibraryEntry, @ViewBuilder content: () -> Content) -> some View {
+        content()
+            .contentShape(Rectangle())
+            .entryHoverInfo(entry, collection: collectionName(for: entry))
+            .gesture(TapGesture(count: singleClick ? 1 : 2).exclusively(before: TapGesture()).onEnded { action in
+                select(entry.id)
+                if case .first = action,
+                   NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty { store.open(entry) }
+            })
+            .contextMenu { entryMenu(entry) }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(entry.name)
+            .accessibilityValue(window.selection.contains(entry.id) ? "Selected" : "")
+            .accessibilityAction { window.selection = [entry.id]; if singleClick { store.open(entry) } }
     }
     var list: some View {
         List(selection: $window.selection) {

@@ -5,6 +5,8 @@ struct EntryThumbnail: View {
     let entry: LibraryEntry
     let configuration: ViewConfiguration
     let selected: Bool
+    var displaySize: CGFloat? = nil
+    private var tileSize: CGFloat { displaySize ?? configuration.resolvedThumbnailSize }
     @Environment(\.displayScale) private var scale
     @State private var image: CGImage?
     @State private var fileIcon: NSImage?
@@ -18,11 +20,11 @@ struct EntryThumbnail: View {
             } else {
                 Image(systemName: entry.kind == .folder ? "folder.fill" : entry.kind.icon)
                     .resizable().scaledToFit().foregroundStyle(configuration.palette.color)
-                    .padding(configuration.resolvedThumbnailSize * 0.16)
+                    .padding(tileSize * 0.16)
             }
         }
         .padding(6)
-        .frame(width: configuration.resolvedThumbnailSize, height: configuration.resolvedThumbnailSize)
+        .frame(width: tileSize, height: tileSize)
         .background(selected ? configuration.palette.color.opacity(0.15) : Color(nsColor: .textBackgroundColor).opacity(0.5),
                     in: RoundedRectangle(cornerRadius: 8))
         .overlay {

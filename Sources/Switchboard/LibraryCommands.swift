@@ -56,6 +56,7 @@ struct LibraryCommands: Commands {
     @ObservedObject var store: LibraryStore
     @FocusedObject private var window: LibraryWindowState?
     @AppStorage("minimalView") private var minimal = false
+    @AppStorage("minimalIconBloom") private var minimalIconBloom = true
     @AppStorage("hierarchicalCollections") private var hierarchical = false
     @AppStorage("showCollectionNames") private var showCollectionNames = true
     @AppStorage("singleClickOpen") private var singleClick = false
@@ -76,6 +77,7 @@ struct LibraryCommands: Commands {
         }
         CommandGroup(after: .toolbar) {
             Toggle("Minimal", isOn: $minimal)
+            Toggle("Minimal Icon Bloom", isOn: $minimalIconBloom)
             Toggle("Show Details Panel", isOn: binding(\.showInspector, fallback: true)).disabled(window == nil)
             Menu("Display Format") {
                 Picker("Display Format", selection: Binding(get: { store.data.view }, set: { store.data.view = $0; store.save() })) {

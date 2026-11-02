@@ -1,5 +1,7 @@
 # 8. Minimal-mode icon bloom
 
+Status: implemented. The icon strip uses a pure geometry helper and passive AppKit pointer tracking, reuses entry thumbnails/actions, and exposes the persisted View menu toggle. The following sections retain the design and acceptance criteria.
+
 ## Confirmed outcome
 
 In Minimal mode, icons enlarge smoothly around the pointer, with the closest icon growing most and neighboring icons growing less, like macOS Dock magnification. The user confirmed Dock-style magnification on hover as the intended behavior.
@@ -43,3 +45,7 @@ Use supported SwiftUI hover tracking, or an AppKit tracking view if profiling re
 - Toggling Minimal restores the prior normal display format; disabling bloom restores current Minimal behavior. No original file or entry metadata changes.
 
 This feature can proceed independently of the other seven plans. Do not use private Dock animation APIs.
+
+## Implementation validation
+
+The full XCTest suite passes with 33 tests, including eight bloom tests covering falloff, non-overlap and boundary padding, short heights and thumbnail sizes, Reduce Motion geometry, displayed-frame hit testing, native coordinate conversion, and 1,000-entry geometry/visible-tile rendering. The release app builds successfully. Running-app checks cover pointer magnification, neighboring displacement, the short Minimal window, modifier selection, keyboard navigation, the menu toggle, and preference restoration after relaunch. The geometry benchmark is not an end-to-end animation frame-rate measurement; 60 Hz profiling and visual checks on additional display scales remain release follow-ups.
