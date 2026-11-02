@@ -1,5 +1,7 @@
 # 4. Library health check
 
+Status: implemented on `codex/library-health`. See README for behavior and limits.
+
 ## Outcome and scope
 
 Show missing local references, temporarily unavailable volumes, duplicate references, and optionally broken web links in a reviewable report. Users repair or remove selected references; scans never remove entries automatically. Inspired by [Raindrop.io’s duplicate and broken-link finder](https://raindrop.io/pro/buy).
@@ -33,3 +35,7 @@ Duplicate merging must preview metadata conflicts. Prefer retaining all entries 
 - No web request occurs during a local-only scan or automatically at launch.
 
 Deliver local scanning before remote checks. Reliable status classification is more valuable than a single simplistic broken/not-broken flag.
+
+## Implementation validation
+
+Implemented independently from main `f45f88e`. 65 tests pass; release app build and signature verification pass. Local scan verified with reachable and missing files plus duplicate URLs. Web checks use mocked responses; no saved URL was contacted during UI review. Removable-drive, permission, and cloud-provider behavior still require device testing.
