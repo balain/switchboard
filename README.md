@@ -60,6 +60,10 @@ Single-click or double-click opening applies to entries in every display format.
 
 Use View → Smart Collections or the toolbar to save the current filters, select a saved collection, or manage saved criteria. Smart collections support multiple text conditions, kind, file extension, favorites, physical collection descendants, tag groups, date conditions, icons/colors, and preferred sorting. All saved conditions combine with additional current search/tag filters. Missing references fail closed and can be repaired in the editor. Relative dates refresh on calendar-day/time-zone changes and application activation. The first write retains the prior library in `library.json.before-smart-collections`.
 
+## Bulk organization and Undo
+
+Select multiple entries and use View → Organize Selected, the toolbar, the details panel, or the selection context menu. Add/remove individual tags, set/clear a collection, change favorites, or remove library entries. Actions preserve unrelated tags and fields and use one grouped Undo/Redo operation. All windows share the library history; text editors retain their native editing history. Conflicting history is reported and cleared after the Undo/Redo operation completes. Writes are staged and published only on success, with a one-time `library.json.before-bulk-organization` checkpoint. Original files remain untouched.
+
 ## Collections
 
 Open **File → Manage Collections…** or **Manage collections…** in the sidebar to add, rename, delete, or choose a collection's icon, background color, and parent collection. Save edits with **Save Changes** or **Done**; changing the selected collection also saves the previous collection's edits. Nesting cycles are prevented.

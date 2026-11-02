@@ -1,5 +1,7 @@
 # 3. Bulk organization and Undo
 
+Status: implemented in the `codex/bulk-organization` worktree. Includes focused regression coverage and legacy behavior checks.
+
 ## Outcome and scope
 
 Apply tags, favorites, or collection membership to selected entries in one action. Undo and Redo reverse an entire bulk action, including removal from the library. Original files stay untouched. Inspired by [DEVONthink batch processing](https://www.devontechnologies.com/apps/devonthink/editions).
@@ -31,3 +33,7 @@ Use field-level patches so Undo does not overwrite later unrelated edits. Before
 - Verify Command-click/Shift-click, context-menu selection, text-editor Undo, and keyboard actions in every display format.
 
 Do not add bulk file-system rename/move/delete. Transaction design is shared with imports, health repairs, and rules.
+
+## Implementation validation
+
+The branch has 41 passing XCTest cases and builds a signed release app. Verified Command/Shift selection, the multi-entry inspector, grouped favorite changes and Undo, and native text Undo using an isolated sample library.

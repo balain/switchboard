@@ -1,6 +1,6 @@
 # Feature implementation plans
 
-Status: Smart collections and plan 8 are implemented on this feature branch. Other feature plans remain proposed.
+Status: smart collections, bulk organization, and Minimal-mode icon bloom are implemented. Other plans remain proposed.
 
 These plans target the current SwiftUI/AppKit application on macOS 14.4+, using system frameworks and local storage. Suggested types and files are implementation targets, not existing interfaces.
 
