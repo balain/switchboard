@@ -1,5 +1,7 @@
 # 5. Search inside documents
 
+Status: implemented on `codex/content-search`. See README for behavior and limits.
+
 ## Outcome and scope
 
 Find library files by their contents and show a short matching excerpt. Version one supports text and searchable PDFs; scanned-PDF OCR and remote web-page indexing are deferred. Inspired by [HoudahSpot’s content search and matching text previews](https://www.houdah.com/houdahSpot/index.html).
@@ -32,3 +34,7 @@ Metadata and document matching use OR in Both mode; scope and tag predicates sti
 - Verify cache eviction and deletion, snippet highlighting, and zero network access.
 
 The first milestone is a coverage/latency prototype. Do not promise reliable full-library search until that experiment establishes a suitable backend strategy.
+
+## Implementation validation
+
+Implemented independently from main `f45f88e`. 62 tests pass; release app build and signature verification pass. Native UI found and highlighted a query present only in a text document. Spotlight prototype returned started=false and no results in this environment, so bounded direct text/PDF extraction is the shipped backend. Generated searchable PDFs, cancellation, cache invalidation, and eviction are tested. Cloud providers require device testing.

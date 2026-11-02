@@ -2,10 +2,10 @@ import SwiftUI
 import AppKit
 
 extension View {
-    func entryHoverInfo(_ entry: LibraryEntry, collection: String?) -> some View {
+    func entryHoverInfo(_ entry: LibraryEntry, collection: String?, excerpt: String? = nil) -> some View {
         onHover { hovering in
             if hovering {
-                EntryHoverPanel.shared.show(entry, collection: collection)
+                EntryHoverPanel.shared.show(entry, collection: collection, excerpt: excerpt)
             } else {
                 EntryHoverPanel.shared.hide(entry.id)
             }
@@ -40,7 +40,7 @@ private final class EntryHoverPanel: NSObject {
         }
     }
 
-    func show(_ entry: LibraryEntry, collection: String?) {
+    func show(_ entry: LibraryEntry, collection: String?, excerpt: String?) {
         guard !menuIsTracking, NSEvent.pressedMouseButtons == 0 else { return }
         pending?.cancel()
         if entryID == entry.id, panel?.isVisible == true { return }
@@ -52,7 +52,7 @@ private final class EntryHoverPanel: NSObject {
             catch { return }
             guard !Task.isCancelled, NSApp.isActive, !self.menuIsTracking,
                   NSEvent.pressedMouseButtons == 0, self.entryID == entry.id else { return }
-            self.present(entry, collection: collection)
+            self.present(entry, collection: collection, excerpt: excerpt)
         }
     }
 
@@ -83,12 +83,12 @@ private final class EntryHoverPanel: NSObject {
         menuIsTracking = false
     }
 
-    private func present(_ entry: LibraryEntry, collection: String?) {
+    private func present(_ entry: LibraryEntry, collection: String?, excerpt: String?) {
         let point = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) else { return }
         let bounds = screen.visibleFrame.insetBy(dx: 8, dy: 8)
         let previewHeight = min(200, max(80, bounds.height - 420))
-        let content = NSHostingView(rootView: EntryHoverDetails(entry: entry, collection: collection, previewHeight: previewHeight)
+        let content = NSHostingView(rootView: EntryHoverDetails(entry: entry, collection: collection, previewHeight: previewHeight, excerpt: excerpt)
             .frame(width: entry.kind == .file ? 400 : 320)
             .frame(maxHeight: bounds.height))
         let size = content.fittingSize
@@ -115,6 +115,7 @@ private struct EntryHoverDetails: View {
     let entry: LibraryEntry
     let collection: String?
     let previewHeight: CGFloat
+    var excerpt: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -124,6 +125,7 @@ private struct EntryHoverDetails: View {
                 if entry.favorite { Image(systemName: "star.fill").foregroundStyle(.orange) }
             }
             Text(entry.kind.title).font(.caption).foregroundStyle(.secondary)
+            if let excerpt, !excerpt.isEmpty { detail("Content match", excerpt, lines: 4) }
             if entry.kind == .file { FileHoverPreview(entry: entry, height: previewHeight) }
             Divider()
             detail(entry.kind == .url ? "URL" : "Location", entry.location, lines: entry.kind == .file ? 3 : 5)
