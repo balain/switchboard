@@ -56,6 +56,10 @@ The toolbar provides adding entries, choosing a display format, configuring the 
 
 Single-click or double-click opening applies to entries in every display format. Command-click supports card/thumbnail multiselection; Command-click and Shift-click do not open entries. Right-click an item for opening, revealing in Finder, copying its location, changing favorite status, moving between collections, or removing it from the library. Hover panels dismiss when you click, scroll, type, or open a menu.
 
+## Smart collections
+
+Use View → Smart Collections or the toolbar to save the current filters, select a saved collection, or manage saved criteria. Smart collections support multiple text conditions, kind, file extension, favorites, physical collection descendants, tag groups, date conditions, icons/colors, and preferred sorting. All saved conditions combine with additional current search/tag filters. Missing references fail closed and can be repaired in the editor. Relative dates refresh on calendar-day/time-zone changes and application activation. The first write retains the prior library in `library.json.before-smart-collections`.
+
 ## Collections
 
 Open **File → Manage Collections…** or **Manage collections…** in the sidebar to add, rename, delete, or choose a collection's icon, background color, and parent collection. Save edits with **Save Changes** or **Done**; changing the selected collection also saves the previous collection's edits. Nesting cycles are prevented.

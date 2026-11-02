@@ -42,7 +42,7 @@ struct LibraryTag: Identifiable, Codable, Hashable {
     var symbol: String { icon ?? "tag.fill" }
 }
 
-enum TagMatch: String, CaseIterable, Identifiable {
+enum TagMatch: String, Codable, CaseIterable, Identifiable {
     case any, all
     var id: String { rawValue }
     var title: String { self == .any ? "Match any tag" : "Match all tags" }
@@ -105,6 +105,7 @@ struct LibraryData: Codable {
     var entries: [LibraryEntry] = []
     var collections: [LibraryCollection] = []
     var tags: [LibraryTag] = []
+    var savedFilters: [SavedFilter] = []
     var view: LibraryView = .mediumCards
     var configurations: [String: ViewConfiguration] = [:]
     var sort: EntrySort = .name
@@ -112,13 +113,14 @@ struct LibraryData: Codable {
 
     init() { }
     private enum CodingKeys: String, CodingKey {
-        case entries, collections, tags, view, configurations, sort, appearance
+        case entries, collections, tags, savedFilters, view, configurations, sort, appearance
     }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         entries = try values.decode([LibraryEntry].self, forKey: .entries)
         collections = try values.decode([LibraryCollection].self, forKey: .collections)
         tags = try values.decodeIfPresent([LibraryTag].self, forKey: .tags) ?? []
+        savedFilters = try values.decodeIfPresent([SavedFilter].self, forKey: .savedFilters) ?? []
         view = try values.decode(LibraryView.self, forKey: .view)
         configurations = try values.decode([String: ViewConfiguration].self, forKey: .configurations)
         sort = try values.decode(EntrySort.self, forKey: .sort)
@@ -182,11 +184,15 @@ enum LibraryLogic {
               let host = url.host, !host.isEmpty, !host.contains(" ") else { return nil }
         return url
     }
+    static func matches(_ entry: LibraryEntry, query: String) -> Bool {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return query.isEmpty || [entry.name, entry.location, entry.notes, entry.tags.joined(separator: " ")]
+            .contains { $0.localizedCaseInsensitiveContains(query) }
+    }
     static func filtered(_ entries: [LibraryEntry], query: String, sort: EntrySort) -> [LibraryEntry] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return entries.filter {
-            query.isEmpty || [$0.name, $0.location, $0.notes, $0.tags.joined(separator: " ")]
-                .contains { $0.localizedCaseInsensitiveContains(query) }
+            matches($0, query: query)
         }.sorted {
             switch sort {
             case .newest: return $0.added > $1.added

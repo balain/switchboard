@@ -33,9 +33,12 @@ struct ContentView: View {
     @AppStorage("showCollectionNames") private var showCollectionNames = true
     @AppStorage("singleClickOpen") private var singleClick = false
     @State private var removeIDs: Set<UUID> = []
+    @State private var filterDate = Date()
     @State private var dropTarget = false
     var collectionID: UUID? { UUID(uuidString: window.scope) }
+    var smartCollection: SavedFilter? { store.data.savedFilters.first { $0.scope == window.scope } }
     var title: String {
+        if let smartCollection { return smartCollection.name }
         if let collectionID { return store.data.collections.first { $0.id == collectionID }?.name ?? "Collection" }
         switch window.scope { case "favorites": return "Favorites"; case "file": return "Files"; case "folder": return "Folders"; case "url": return "URLs"; default: return "All entries" }
     }
@@ -43,14 +46,15 @@ struct ContentView: View {
     var selectedTagNames: Set<String> {
         Set(store.data.tags.filter { window.selectedTags.contains($0.id) }.map(\.name))
     }
-    var searching: Bool { !window.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !window.selectedTags.isEmpty }
+    var hasAdditionalFilters: Bool { !window.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !window.selectedTags.isEmpty }
+    var searching: Bool { smartCollection != nil || hasAdditionalFilters }
     var entries: [LibraryEntry] {
-        LibraryLogic.scopedEntries(store.data.entries, collections: store.data.collections, scope: window.scope,
-                                   hierarchical: hierarchical, query: window.query, sort: store.data.sort,
+        LibraryLogic.scopedEntries(smartCollection.map { saved in store.data.entries.filter { saved.criteria.matches($0, in: store.data, now: filterDate) } } ?? store.data.entries, collections: store.data.collections, scope: window.scope,
+                                   hierarchical: smartCollection == nil && hierarchical, query: window.query, sort: store.data.sort,
                                    tags: selectedTagNames, tagMatch: window.tagMatch)
     }
     var searchMatches: [LibraryEntry] {
-        LibraryLogic.scopedEntries(store.data.entries, collections: store.data.collections, scope: window.scope,
+        LibraryLogic.scopedEntries(smartCollection.map { saved in store.data.entries.filter { saved.criteria.matches($0, in: store.data, now: filterDate) } } ?? store.data.entries, collections: store.data.collections, scope: window.scope,
                                    hierarchical: false, query: window.query, sort: store.data.sort,
                                    tags: selectedTagNames, tagMatch: window.tagMatch)
     }
@@ -66,8 +70,13 @@ struct ContentView: View {
         .tint(store.configuration.palette.color)
         .onChange(of: store.data.view) { _, _ in store.save() }
         .onChange(of: store.data.sort) { _, _ in store.save() }
-        .onChange(of: window.scope) { _, _ in window.selection.removeAll() }
-        .onAppear { window.validate(in: store.data) }
+        .onChange(of: window.scope) { _, _ in window.selection.removeAll(); if let sort = smartCollection?.sort { store.data.sort = sort } }
+        .onAppear { window.validate(in: store.data); if let sort = smartCollection?.sort { store.data.sort = sort } }
+        .onChange(of: store.data.savedFilters) { _, _ in window.validate(in: store.data) }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in filterDate = Date() }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in filterDate = Date() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in filterDate = Date() }
+        .sheet(isPresented: $window.showSmartCollections) { SmartCollectionManager(store: store, initial: window.smartDraft) }
         .onChange(of: store.data.tags) { _, _ in window.validate(in: store.data) }
         .onChange(of: window.selectedTags) { _, _ in window.selection.removeAll() }
         .onChange(of: window.tagMatch) { _, _ in window.selection.removeAll() }
@@ -112,6 +121,13 @@ struct ContentView: View {
                     Button { window.showCollections = true } label: { Label("Manage collections…", systemImage: "folder.badge.gearshape") }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 } header: { Text("COLLECTIONS") }
+                Section("SMART COLLECTIONS") {
+                    ForEach(store.data.savedFilters) { filter in
+                        Label(filter.name, systemImage: filter.icon ?? "line.3.horizontal.decrease.circle")
+                            .tag(filter.scope).listRowBackground(filter.palette?.color.opacity(0.18))
+                    }
+                    Menu("Smart collections…") { SmartCollectionMenu(store: store, window: window) }
+                }
                 Section {
                     ForEach(store.data.tags.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { tag in
                         Toggle(isOn: Binding(get: { window.selectedTags.contains(tag.id) }, set: { enabled in
@@ -165,6 +181,16 @@ struct ContentView: View {
                     }.padding(24)
                     Divider()
                 }
+                    if let smartCollection {
+                    HStack {
+                        Text(smartCollection.criteria.unavailable(in: store.data)
+                             ? "A saved condition is unavailable. Edit this smart collection to repair it."
+                             : "Entries update automatically as saved conditions change. New entries must match to appear here.")
+                        Spacer()
+                        Button("Edit…") { window.smartDraft = smartCollection; window.showSmartCollections = true }
+                        if hasAdditionalFilters { Button("Clear Additional Filters") { window.query = ""; window.selectedTags = [] } }
+                    }.font(.caption).padding(12)
+                }
                 if !window.selectedTags.isEmpty {
                     HStack {
                         Label("\(window.selectedTags.count) \(window.selectedTags.count == 1 ? "tag filter" : "tag filters") · \(window.tagMatch.title)", systemImage: "line.3.horizontal.decrease.circle")
@@ -192,7 +218,9 @@ struct ContentView: View {
                     } description: {
                         Text(!searching ? "Add files, folders, or URLs. You can also drop them here." : "Try a different search, tag filter, or collection.")
                     } actions: {
-                        if !searching {
+                        if let smartCollection {
+                            Button("Edit Smart Collection…") { window.smartDraft = smartCollection; window.showSmartCollections = true }
+                        } else if !searching {
                             Button("Add Files and Folders…") { store.importFiles(collectionID: collectionID) }
                             Button("Add URL…") { window.showURL = true }
                         } else { Button("Clear Search and Tags") { window.query = ""; window.selectedTags.removeAll() } }
@@ -214,7 +242,7 @@ struct ContentView: View {
     }
     private var detail: some View {
         detailContent
-            .background(currentCollection?.palette?.color.opacity(0.12) ?? Color(nsColor: .controlBackgroundColor))
+            .background((currentCollection?.palette ?? smartCollection?.palette)?.color.opacity(0.12) ?? Color(nsColor: .controlBackgroundColor))
             .overlay { if dropTarget { RoundedRectangle(cornerRadius: 8).stroke(store.configuration.palette.color, lineWidth: 3).padding(4).allowsHitTesting(false) } }
             .dropDestination(for: URL.self) { urls, _ in
                 let valid: [URL] = urls.filter { url in url.isFileURL || LibraryLogic.webURL(url.absoluteString) != nil }
@@ -239,6 +267,7 @@ struct ContentView: View {
                     Picker("View", selection: $store.data.view) {
                         ForEach(LibraryView.allCases) { Label($0.title, systemImage: $0.icon).tag($0) }
                     }.pickerStyle(.menu).frame(maxWidth: 170)
+                    Menu { SmartCollectionMenu(store: store, window: window) } label: { Label("Smart collections", systemImage: "line.3.horizontal.decrease.circle") }
                     Menu { CollectionFilterMenu(store: store, window: window) } label: { Label("Collections", systemImage: "folder") }
                         .help("Select or manage collections")
                     Menu { TagFilterMenu(store: store, window: window) } label: { Label("Filter by tags", systemImage: "tag") }

@@ -19,12 +19,38 @@ final class LibraryStore: ObservableObject {
             registerEntryTags()
         } catch { canSave = false; self.error = "Could not read the library: \(error.localizedDescription). Your saved library has not been changed." }
     }
-    func save() {
-        guard canSave else { error = "Saving is disabled because the existing library could not be read. Restore library.json from a backup and restart Switchboard."; return }
+    @discardableResult
+    func save() -> Bool { persist(data) }
+    private func persist(_ candidate: LibraryData) -> Bool {
+        guard canSave else { error = "Saving is disabled because the existing library could not be read."; return false }
         do {
             try FileManager.default.createDirectory(at: storageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try JSONEncoder().encode(data).write(to: storageURL, options: .atomic)
-        } catch { self.error = "Could not save the library: \(error.localizedDescription)" }
+            let checkpoint = storageURL.appendingPathExtension("before-smart-collections")
+            if FileManager.default.fileExists(atPath: storageURL.path), !FileManager.default.fileExists(atPath: checkpoint.path) {
+                try FileManager.default.copyItem(at: storageURL, to: checkpoint)
+            }
+            try JSONEncoder().encode(candidate).write(to: storageURL, options: .atomic)
+            return true
+        } catch { self.error = "Could not save the library: \(error.localizedDescription)"; return false }
+    }
+    @discardableResult
+    func putSavedFilter(_ value: SavedFilter) -> Bool {
+        var value = value
+        value.name = value.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.name.isEmpty, !data.savedFilters.contains(where: {
+            $0.id != value.id && $0.name.caseInsensitiveCompare(value.name) == .orderedSame
+        }) else { error = "Enter a unique smart collection name."; return false }
+        var candidate = data
+        if let index = candidate.savedFilters.firstIndex(where: { $0.id == value.id }) { candidate.savedFilters[index] = value }
+        else { candidate.savedFilters.append(value) }
+        guard persist(candidate) else { return false }
+        data = candidate
+        return true
+    }
+    func removeSavedFilter(_ id: UUID) {
+        var candidate = data
+        candidate.savedFilters.removeAll { $0.id == id }
+        if persist(candidate) { data = candidate }
     }
     var configuration: ViewConfiguration {
         get { data.configurations[data.view.rawValue] ?? ViewConfiguration() }
