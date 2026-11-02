@@ -1,6 +1,6 @@
 # Feature implementation plans
 
-Status: plans 1, 2, 3, and 8 plus library health are implemented on this branch. Other plans remain separate.
+Status: plans 1–8 are implemented. See the individual plans for scope and validation.
 
 These plans target the current SwiftUI/AppKit application on macOS 14.4+, using system frameworks and local storage. Suggested types and files are implementation targets, not existing interfaces.
 

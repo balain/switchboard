@@ -42,6 +42,9 @@ struct ContentView: View {
     @AppStorage("hierarchicalCollections") private var hierarchical = false
     @AppStorage("showCollectionNames") private var showCollectionNames = true
     @AppStorage("singleClickOpen") private var singleClick = false
+    @AppStorage("contentSearchMode") private var contentMode: ContentSearchMode = .metadata
+    @StateObject private var contentSearch = ContentSearchModel()
+    @State private var contentCacheVersion = 0
     @State private var filterDate = Date()
     @State private var selectionAnchor: UUID?
     private var removeIDs: Set<UUID> {
@@ -62,16 +65,30 @@ struct ContentView: View {
     }
     var hasAdditionalFilters: Bool { !window.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !window.selectedTags.isEmpty }
     var searching: Bool { smartCollection != nil || hasAdditionalFilters }
+    var contentQueryActive: Bool { !window.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && contentMode != .metadata }
+    var contentCandidates: [LibraryEntry] {
+        LibraryLogic.scopedEntries(smartCollection.map { saved in store.data.entries.filter { saved.criteria.matches($0, in: store.data, now: filterDate) } } ?? store.data.entries,
+                                   collections: store.data.collections, scope: window.scope,
+                                   hierarchical: smartCollection == nil && hierarchical && !contentQueryActive,
+                                   query: contentQueryActive ? "" : window.query, sort: store.data.sort,
+                                   tags: selectedTagNames, tagMatch: window.tagMatch)
+    }
+    var contentRequest: ContentSearchRequest {
+        ContentSearchRequest(entries: contentCandidates, libraryIDs: Set(store.data.entries.map(\.id)), query: window.query.trimmingCharacters(in: .whitespacesAndNewlines), mode: contentMode, cacheVersion: contentCacheVersion)
+    }
+    func contentMatch(for entry: LibraryEntry) -> ContentMatch? {
+        guard contentQueryActive, contentSearch.request == contentRequest else { return nil }
+        return contentSearch.matches[entry.id]
+    }
     var entries: [LibraryEntry] {
-        LibraryLogic.scopedEntries(smartCollection.map { saved in store.data.entries.filter { saved.criteria.matches($0, in: store.data, now: filterDate) } } ?? store.data.entries, collections: store.data.collections, scope: window.scope,
-                                   hierarchical: smartCollection == nil && hierarchical, query: window.query, sort: store.data.sort,
-                                   tags: selectedTagNames, tagMatch: window.tagMatch)
+        guard contentQueryActive else { return contentCandidates }
+        let candidates = contentCandidates
+        let matches = contentSearch.request == contentRequest ? contentSearch.matches : [:]
+        return candidates.filter { entry in
+            matches[entry.id]?.state == .matched || (contentMode == .both && LibraryLogic.matches(entry, query: window.query))
+        }
     }
-    var searchMatches: [LibraryEntry] {
-        LibraryLogic.scopedEntries(smartCollection.map { saved in store.data.entries.filter { saved.criteria.matches($0, in: store.data, now: filterDate) } } ?? store.data.entries, collections: store.data.collections, scope: window.scope,
-                                   hierarchical: false, query: window.query, sort: store.data.sort,
-                                   tags: selectedTagNames, tagMatch: window.tagMatch)
-    }
+    var searchMatches: [LibraryEntry] { entries }
     var childCollections: [LibraryCollection] {
         guard hierarchical, !searching, window.scope == "all" || collectionID != nil else { return [] }
         return store.data.collections.filter { $0.parentID == collectionID }
@@ -83,6 +100,10 @@ struct ContentView: View {
         .focusedSceneObject(window)
         .background(LauncherWindowBridge(launcher: launcher, state: window))
         .tint(store.configuration.palette.color)
+        .task(id: contentRequest) { await contentSearch.run(contentRequest) }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("Switchboard.libraryReplaced"))) { _ in
+            Task { await contentSearch.clearCache(); contentCacheVersion += 1 }
+        }
         .onChange(of: store.data.view) { _, _ in store.save() }
         .onChange(of: store.data.sort) { _, _ in store.save() }
         .onChange(of: window.scope) { _, _ in
@@ -93,7 +114,7 @@ struct ContentView: View {
         .onChange(of: store.data.savedFilters) { _, _ in window.validate(in: store.data) }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in filterDate = Date() }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in filterDate = Date() }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in filterDate = Date() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in filterDate = Date(); if contentQueryActive { contentCacheVersion += 1 } }
         .sheet(isPresented: $window.showSmartCollections) { SmartCollectionManager(store: store, initial: window.smartDraft) }
         .onChange(of: store.data.tags) { _, _ in window.validate(in: store.data) }
         .onChange(of: window.selectedTags) { _, _ in window.clearSelectionForFilterChange(); selectionAnchor = nil }
@@ -210,6 +231,12 @@ struct ContentView: View {
                         if hasAdditionalFilters { Button("Clear Additional Filters") { window.query = ""; window.selectedTags = [] } }
                     }.font(.caption).padding(12)
                 }
+                if contentQueryActive {
+                    ContentSearchStatus(model: contentSearch, request: contentRequest, refresh: { contentCacheVersion += 1 }, clear: {
+                        Task { await contentSearch.clearCache(); contentCacheVersion += 1 }
+                    })
+                    Divider()
+                }
                 if !window.selectedTags.isEmpty {
                     HStack {
                         Label("\(window.selectedTags.count) \(window.selectedTags.count == 1 ? "tag filter" : "tag filters") · \(window.tagMatch.title)", systemImage: "line.3.horizontal.decrease.circle")
@@ -288,6 +315,9 @@ struct ContentView: View {
                     Picker("View", selection: $store.data.view) {
                         ForEach(LibraryView.allCases) { Label($0.title, systemImage: $0.icon).tag($0) }
                     }.pickerStyle(.menu).frame(maxWidth: 170)
+                    Menu {
+                        Picker("Search In", selection: $contentMode) { ForEach(ContentSearchMode.allCases) { Text($0.title).tag($0) } }
+                    } label: { Label("Search mode", systemImage: "doc.text.magnifyingglass") }
                     Menu { SmartCollectionMenu(store: store, window: window) } label: { Label("Smart collections", systemImage: "line.3.horizontal.decrease.circle") }
                     Menu { CollectionFilterMenu(store: store, window: window) } label: { Label("Collections", systemImage: "folder") }
                         .help("Select or manage collections")
@@ -299,7 +329,7 @@ struct ContentView: View {
                     Button { window.showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.right") }
                 }
             }
-            .searchable(text: $window.query, isPresented: $window.searchPresented, prompt: "Search names, tags, notes, and locations")
+            .searchable(text: $window.query, isPresented: $window.searchPresented, prompt: Text(contentMode.searchPrompt))
             .searchSuggestions {
                 if searching {
                     ForEach(searchMatches.prefix(12)) { entry in
@@ -352,7 +382,7 @@ struct ContentView: View {
                         if thumbnails {
                             EntryThumbnail(entry: entry, configuration: store.configuration, selected: window.selection.contains(entry.id))
                         } else {
-                            EntryTile(entry: entry, configuration: store.configuration, view: store.data.view, selected: window.selection.contains(entry.id))
+                            EntryTile(entry: entry, configuration: store.configuration, view: store.data.view, selected: window.selection.contains(entry.id), contentMatch: contentMatch(for: entry), query: window.query)
                         }
                     }
                 }
@@ -371,7 +401,7 @@ struct ContentView: View {
     func entryInteraction<Content: View>(_ entry: LibraryEntry, @ViewBuilder content: () -> Content) -> some View {
         content()
             .contentShape(Rectangle())
-            .entryHoverInfo(entry, collection: collectionName(for: entry))
+            .entryHoverInfo(entry, collection: collectionName(for: entry), excerpt: contentMatch(for: entry)?.snippet)
             .modifier(EntryClickInteraction(singleClick: singleClick, select: { select(entry.id, modifiers: $0) }, open: { store.open(entry) }))
             .contextMenu { entryMenu(entry) }
             .accessibilityElement(children: .combine)
@@ -387,7 +417,7 @@ struct ContentView: View {
                     EntryIcon(kind: entry.kind, color: store.configuration.palette.color, size: store.data.view == .compactList ? 30 : 44)
                     VStack(alignment: .leading, spacing: 5) {
                         HStack { Text(entry.name).fontWeight(.medium).lineLimit(1); if entry.favorite { Image(systemName: "star.fill").foregroundStyle(.orange).font(.caption) } }
-                        EntryDetails(entry: entry, configuration: store.configuration)
+                        EntryDetails(entry: entry, configuration: store.configuration, contentMatch: contentMatch(for: entry), query: window.query)
                     }
                     Spacer(minLength: 0)
                     if !singleClick {
@@ -398,7 +428,7 @@ struct ContentView: View {
                 .padding(.vertical, store.data.view == .compactList ? 2 : 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
-                .entryHoverInfo(entry, collection: collectionName(for: entry))
+                .entryHoverInfo(entry, collection: collectionName(for: entry), excerpt: contentMatch(for: entry)?.snippet)
                 .tag(entry.id)
                 .simultaneousGesture(TapGesture(count: 1).onEnded { openOnSingleClick(entry) })
                 .contextMenu { entryMenu(entry) }
@@ -419,7 +449,7 @@ struct ContentView: View {
         content()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .entryHoverInfo(entry, collection: collectionName(for: entry))
+            .entryHoverInfo(entry, collection: collectionName(for: entry), excerpt: contentMatch(for: entry)?.snippet)
             .simultaneousGesture(TapGesture(count: 1).onEnded { openOnSingleClick(entry) })
     }
     var table: some View {
@@ -429,6 +459,11 @@ struct ContentView: View {
                     HStack { Image(systemName: entry.kind.icon).foregroundStyle(store.configuration.palette.color); Text(entry.name); if entry.favorite { Image(systemName: "star.fill").foregroundStyle(.orange) } }
                 }
             }.width(min: 150, ideal: 220)
+            if contentQueryActive {
+                TableColumn("Content match") { entry in
+                    tableCell(entry) { ContentSnippet(text: contentMatch(for: entry)?.snippet ?? "", query: window.query) }
+                }.width(min: 180, ideal: 260)
+            }
             if store.configuration.fields.contains(.kind) {
                 TableColumn("Kind") { entry in tableCell(entry) { Text(entry.kind.title) } }.width(min: 60, ideal: 75)
             }
@@ -504,8 +539,11 @@ struct EntryIcon: View {
 struct EntryDetails: View {
     let entry: LibraryEntry
     let configuration: ViewConfiguration
+    var contentMatch: ContentMatch? = nil
+    var query = ""
     var body: some View {
         Group {
+            if let contentMatch, contentMatch.state == .matched { ContentSnippet(text: contentMatch.snippet, query: query) }
             if configuration.fields.contains(.kind) { Text(entry.kind.title).foregroundStyle(configuration.palette.color) }
             if configuration.fields.contains(.location) { Text(entry.subtitle).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle).help(entry.location) }
             if configuration.fields.contains(.notes), !entry.notes.isEmpty { Text(entry.notes).foregroundStyle(.secondary).lineLimit(2) }
@@ -521,6 +559,8 @@ struct EntryTile: View {
     let configuration: ViewConfiguration
     let view: LibraryView
     let selected: Bool
+    var contentMatch: ContentMatch? = nil
+    var query = ""
     var body: some View {
         VStack(alignment: .leading, spacing: view == .smallCards ? 6 : 12) {
             HStack(alignment: .top) {
@@ -529,7 +569,7 @@ struct EntryTile: View {
                 if entry.favorite { Image(systemName: "star.fill").font(.caption).foregroundStyle(.orange) }
             }
             Text(entry.name).font(configuration.font.weight(.semibold)).lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .leading, spacing: view == .smallCards ? 4 : 7) { EntryDetails(entry: entry, configuration: configuration) }
+            VStack(alignment: .leading, spacing: view == .smallCards ? 4 : 7) { EntryDetails(entry: entry, configuration: configuration, contentMatch: contentMatch, query: query) }
             if view != .smallCards { Spacer(minLength: 0) }
         }
         .padding(view == .smallCards ? 10 : 20)

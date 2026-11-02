@@ -101,6 +101,7 @@ struct LibraryCommands: Commands {
     @ObservedObject var launcher: QuickLauncherCoordinator
     @Environment(\.openWindow) private var openWindow
     @FocusedObject private var window: LibraryWindowState?
+    @AppStorage("contentSearchMode") private var contentMode: ContentSearchMode = .metadata
     @AppStorage("minimalView") private var minimal = false
     @AppStorage("minimalIconBloom") private var minimalIconBloom = true
     @AppStorage("hierarchicalCollections") private var hierarchical = false
@@ -160,6 +161,9 @@ struct LibraryCommands: Commands {
                     }
                 }.pickerStyle(.inline)
             }.disabled(window == nil)
+            Menu("Search In") {
+                Picker("Search In", selection: $contentMode) { ForEach(ContentSearchMode.allCases) { Text($0.title).tag($0) } }
+            }
             Menu("Smart Collections") {
                 if let window { SmartCollectionMenu(store: store, window: window) }
             }.disabled(window == nil)

@@ -72,6 +72,10 @@ Use File → Quick Launcher… or Control-Option-Space from another application.
 
 Use File → Library Health… to check local references and review duplicates without changing the library. Check Web Links explicitly makes bounded, cookie-free HEAD requests, with a small ranged GET fallback when HEAD is unsupported. Missing files, unavailable volumes, permissions, cloud placeholders, authentication, rate limits, and temporary failures are distinguished. Locate Replacement preserves entry identity and metadata and supports Undo. Removal affects only selected current references; original files remain untouched. Duplicate merging is not automatic: compare the listed metadata and choose which references to keep.
 
+## Document content search
+
+Use View → Search In or the toolbar to choose Metadata, Document Contents, or Both. Both combines metadata and document matches within the active tag/collection/smart scope. Bounded direct extraction supports UTF-8/UTF-16 text and searchable PDFs; text is limited to 1 MB, PDF input to 8 MB/200 pages, and extracted text to 500,000 characters. Unsupported, unavailable, remote, and not-downloaded files are reported as not searched; OCR and web-page indexing are not included. Matching excerpts are highlighted. Refresh rechecks external changes; Clear Cache removes the local, size-limited search cache. Spotlight was prototyped but could not start in this environment, so search does not depend on its index.
+
 ## Collections
 
 Open **File → Manage Collections…** or **Manage collections…** in the sidebar to add, rename, delete, or choose a collection's icon, background color, and parent collection. Save edits with **Save Changes** or **Done**; changing the selected collection also saves the previous collection's edits. Nesting cycles are prevented.
