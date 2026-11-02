@@ -22,6 +22,8 @@ final class LibraryWindowState: ObservableObject {
     @Published var tagMatch: TagMatch {
         didSet { defaults.set(tagMatch.rawValue, forKey: "tagMatch") }
     }
+    @Published var smartDraft: SavedFilter?
+    @Published var showSmartCollections = false
     @Published var showTags = false
     @Published var showURL = false
     @Published var showCollections = false
@@ -44,9 +46,32 @@ final class LibraryWindowState: ObservableObject {
         }
     }
 
+    func currentFilter(in data: LibraryData) -> SavedFilter {
+        var value = data.savedFilters.first { $0.scope == scope } ?? SavedFilter(name: "Saved filters")
+        value.id = UUID()
+        value.sort = data.sort
+        var suffix = 2
+        let base = value.name
+        while data.savedFilters.contains(where: { $0.name.caseInsensitiveCompare(value.name) == .orderedSame }) {
+            value.name = base + " \(suffix)"; suffix += 1
+        }
+        value.criteria.queries.removeAll { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { value.criteria.queries.append(query) }
+        if value.criteria.queries.isEmpty { value.criteria.queries = [""] }
+        if !selectedTags.isEmpty {
+            if value.criteria.tagIDs.isEmpty && value.criteria.additionalTags.isEmpty {
+                value.criteria.tagIDs = selectedTags; value.criteria.tagMatch = tagMatch
+            } else { value.criteria.additionalTags.append(TagConstraint(ids: selectedTags, match: tagMatch)) }
+        }
+        if let kind = EntryKind(rawValue: scope) { value.criteria.kind = kind }
+        if scope == "favorites" { value.criteria.favorite = true }
+        if let id = UUID(uuidString: scope) { value.criteria.collectionID = id }
+        return value
+    }
+
     func validate(in data: LibraryData) {
         let standardScopes = ["all", "favorites"] + EntryKind.allCases.map(\.rawValue)
-        if !standardScopes.contains(scope), !data.collections.contains(where: { $0.id.uuidString == scope }) { scope = "all" }
+        if !standardScopes.contains(scope), !data.collections.contains(where: { $0.id.uuidString == scope }), !data.savedFilters.contains(where: { $0.scope == scope }) { scope = "all" }
         selectedTags.formIntersection(Set(data.tags.map(\.id)))
         selection.formIntersection(Set(data.entries.map(\.id)))
     }
@@ -102,6 +127,9 @@ struct LibraryCommands: Commands {
                         Text(LibraryLogic.collectionPath($0, in: store.data.collections)).tag($0.id.uuidString)
                     }
                 }.pickerStyle(.inline)
+            }.disabled(window == nil)
+            Menu("Smart Collections") {
+                if let window { SmartCollectionMenu(store: store, window: window) }
             }.disabled(window == nil)
             Menu("Collections") {
                 if let window { CollectionFilterMenu(store: store, window: window) }

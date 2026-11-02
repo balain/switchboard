@@ -1,5 +1,7 @@
 # 1. Smart collections
 
+Status: implemented in the `codex/smart-collections` worktree. Includes focused regression coverage and legacy behavior checks.
+
 ## Outcome and scope
 
 Save a combination of filters as a named, automatically updating collection. For example, “Class PDFs” can match file entries ending in `.pdf`, tagged “Bible Class,” within a chosen collection and its descendants. Smart collections reference entries; they do not change physical collection membership.
@@ -32,3 +34,7 @@ Deleting a referenced tag/collection marks affected criteria unavailable and ret
 - Check empty results, live counts, duplicate names, keyboard selection, and Minimal-mode menu access.
 
 Deliver after the backup foundation; the date evaluator and typed scope changes are the principal implementation risks.
+
+## Implementation validation
+
+The branch has 38 passing XCTest cases and builds a signed release app. Verified saving a tag condition, the live match count, selecting a saved collection, restoration on relaunch, and the corrected editor layout using an isolated sample library.
