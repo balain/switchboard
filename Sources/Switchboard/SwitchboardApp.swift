@@ -125,6 +125,8 @@ struct ContentView: View {
         .sheet(isPresented: $window.showHealth) { HealthReport(store: store) }
         .sheet(isPresented: $window.showLibraryTransfer) { LibraryTransferPanel(store: store) }
         .onReceive(NotificationCenter.default.publisher(for: .libraryReplaced)) { _ in window.validate(in: store.data) }
+        .sheet(isPresented: $window.showRules) { RuleManager(store: store) }
+        .sheet(isPresented: $window.showRulePreview) { RulePreviewPanel(store: store, ids: window.rulePreviewIDs) }
         .sheet(isPresented: $window.showURL) { AddURLSheet(store: store, collectionID: collectionID) { window.selection = [$0] } }
         .sheet(isPresented: $window.showCollections) { CollectionManager(store: store) }
         .sheet(isPresented: $window.showTags) { TagManager(store: store) }
@@ -280,7 +282,7 @@ struct ContentView: View {
                 if !minimalView {
                     Divider()
                     HStack {
-                        Text(store.data.view.title)
+                        Text(store.lastRuleSummary.isEmpty ? store.data.view.title : store.lastRuleSummary)
                         Spacer()
                         if !window.selection.isEmpty { Text("\(window.selection.count) selected") }
                         Text("Drop files, folders, or links to add")

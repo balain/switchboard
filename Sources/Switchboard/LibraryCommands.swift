@@ -42,6 +42,9 @@ final class LibraryWindowState: ObservableObject {
     }
     @Published var showHealth = false
     @Published var showLibraryTransfer = false
+    @Published var showRules = false
+    @Published var showRulePreview = false
+    @Published var rulePreviewIDs: Set<UUID>?
     @Published var showTags = false
     @Published var showURL = false
     @Published var showCollections = false
@@ -174,6 +177,11 @@ struct LibraryCommands: Commands {
             }.disabled(window == nil)
             Menu("Tags") {
                 if let window { TagFilterMenu(store: store, window: window) }
+            }.disabled(window == nil)
+            Menu("Rules") {
+                Button("Manage Rules…") { window?.showRules = true }
+                Button("Preview Rules for Selected…") { window?.rulePreviewIDs = window?.selection; window?.showRulePreview = true }.disabled(window?.selection.isEmpty != false)
+                Button("Preview Rules for All Entries…") { window?.rulePreviewIDs = nil; window?.showRulePreview = true }
             }.disabled(window == nil)
             Menu("Organize Selected") {
                 if let window {

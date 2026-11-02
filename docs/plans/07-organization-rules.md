@@ -1,5 +1,7 @@
 # 7. Simple organization rules
 
+Status: implemented on `codex/organization-rules`. See README for behavior and limits.
+
 ## Outcome and scope
 
 Automatically tag or organize newly added entries using rules such as “PDFs under this folder get Research” or “URLs from this host go to Work.” A dry-run preview supports applying rules to existing entries. Inspired by [DEVONthink smart rules](https://www.devontechnologies.com/products/devonthink/).
@@ -32,3 +34,7 @@ Deleting referenced tags/collections disables affected rules and identifies miss
 - Failed writes publish neither new entries nor partial rule results.
 
 Deliver after shared predicates and bulk transactions. Keep trigger semantics narrow before considering update-triggered or watched-folder automation.
+
+## Implementation validation
+
+Implemented independently from main `f45f88e`. 64 tests pass; release app build and signature verification pass. Native UI saved an enabled rule, previewed four changes, applied them, and reversed them in one Undo. Tests cover ordered actions, stop behavior, automatic additions, stale previews, missing references, failure rollback, and legacy decoding. The import processor is prepared for feature 6 integration; portable rule export requires combining the branches.

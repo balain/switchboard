@@ -106,6 +106,7 @@ struct LibraryData: Codable {
     var collections: [LibraryCollection] = []
     var tags: [LibraryTag] = []
     var savedFilters: [SavedFilter] = []
+    var rules: [OrganizationRule] = []
     var view: LibraryView = .mediumCards
     var configurations: [String: ViewConfiguration] = [:]
     var sort: EntrySort = .name
@@ -113,7 +114,7 @@ struct LibraryData: Codable {
 
     init() { }
     private enum CodingKeys: String, CodingKey {
-        case entries, collections, tags, savedFilters, view, configurations, sort, appearance
+        case entries, collections, tags, savedFilters, rules, view, configurations, sort, appearance
     }
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -121,6 +122,7 @@ struct LibraryData: Codable {
         collections = try values.decode([LibraryCollection].self, forKey: .collections)
         tags = try values.decodeIfPresent([LibraryTag].self, forKey: .tags) ?? []
         savedFilters = try values.decodeIfPresent([SavedFilter].self, forKey: .savedFilters) ?? []
+        rules = try values.decodeIfPresent([OrganizationRule].self, forKey: .rules) ?? []
         view = try values.decode(LibraryView.self, forKey: .view)
         configurations = try values.decode([String: ViewConfiguration].self, forKey: .configurations)
         sort = try values.decode(EntrySort.self, forKey: .sort)

@@ -78,6 +78,9 @@ Use View → Search In or the toolbar to choose Metadata, Document Contents, or 
 ## Import, export, and local backups
 
 Open File → Import, Export, and Backups…. Export portable JSON, URL-only bookmark HTML, or quoted CSV; portable data omits access bookmarks and display preferences. Import JSON or bookmark HTML through a conflict preview that preserves existing entries, remaps colliding IDs and references, and offers skip/keep-both duplicate policies. Local references may need renewed access through a file picker. Imports are limited to 10 MB; backup restore reads up to 40 MB. Daily local snapshots retain 30 days, with separate manual and pre-import/pre-restore checkpoints. Restore validates before replacement, preserves the prior file, clears library Undo, and notifies cache/view consumers. The optional import-rule processor runs only in an explicitly enabled preview and never during restore; it composes with the organization-rules branch.
+## Organization rules
+
+Use View → Rules to manage ordered rules or preview them against selected/all entries. New rules start disabled. Conditions include metadata, name/location, kind, extension, exact host, folder ancestry, favorite state, and tags; actions add/remove tags, set/clear a collection, or change favorites. Later assignments win unless processing stops, and preview shows overriding assignments. New additions apply rules once in the staged transaction; Undo can reverse those rule effects without removing the new entry. Manual previews revalidate entries and configuration before one grouped Undo operation. Deleting referenced tags/collections disables affected rules. The import processor is opt-in and composes with the import/export branch; normal edits, Undo, bookmark repair, and restore do not trigger rules.
 
 ## Collections
 
