@@ -68,6 +68,10 @@ Select multiple entries and use View → Organize Selected, the toolbar, the det
 
 Use File → Quick Launcher… or Control-Option-Space from another application. Change or disable the global shortcut through Switchboard → Quick Launcher Settings…. Keys use documented US physical positions. The panel searches the entire library, ranks name matches ahead of other metadata, and offers Open, Show in Finder, Copy Location, and Show in Switchboard. Up/Down select, Return opens, Command-Return reveals in Switchboard, and Escape dismisses. It remains available after closing library windows while the app is running. Registration failures retain the File menu fallback. No global keyboard event interception is used.
 
+## Import, export, and local backups
+
+Open File → Import, Export, and Backups…. Export portable JSON, URL-only bookmark HTML, or quoted CSV; portable data omits access bookmarks and display preferences. Import JSON or bookmark HTML through a conflict preview that preserves existing entries, remaps colliding IDs and references, and offers skip/keep-both duplicate policies. Local references may need renewed access through a file picker. Imports are limited to 10 MB; backup restore reads up to 40 MB. Daily local snapshots retain 30 days, with separate manual and pre-import/pre-restore checkpoints. Restore validates before replacement, preserves the prior file, clears library Undo, and notifies cache/view consumers. The optional import-rule processor runs only in an explicitly enabled preview and never during restore; it composes with the organization-rules branch.
+
 ## Collections
 
 Open **File → Manage Collections…** or **Manage collections…** in the sidebar to add, rename, delete, or choose a collection's icon, background color, and parent collection. Save edits with **Save Changes** or **Done**; changing the selected collection also saves the previous collection's edits. Nesting cycles are prevented.

@@ -7,18 +7,25 @@ import UniformTypeIdentifiers
 final class LibraryStore: ObservableObject {
     @Published var data = LibraryData()
     @Published var error: String?
+    var importRuleProcessor: ((inout LibraryData, Set<UUID>) -> Void)?
+    var importRulesAvailable: Bool { importRuleProcessor != nil }
     @Published var lastAffectedCount = 0
     let undoManager = UndoManager()
     private let storageURL: URL
+    let backups: LibraryBackups
     private let writer: (Data, URL) throws -> Void
     private var lastPersisted = LibraryData()
     private var canSave = true
     private var clearHistoryAfterReplay = false
     private var historySubscriptions: [AnyCancellable] = []
 
-    init(storageURL: URL? = nil, writer: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) {
+    convenience init(storageURL: URL? = nil, writer: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) {
+        self.init(storageURL: storageURL, backupDirectory: nil, clock: Date.init, writer: writer)
+    }
+    init(storageURL: URL? = nil, backupDirectory: URL?, clock: @escaping () -> Date = Date.init, writer: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) {
         self.storageURL = storageURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Switchboard/library.json")
+        self.backups = LibraryBackups(directory: backupDirectory ?? self.storageURL.deletingLastPathComponent().appendingPathComponent("Backups"), clock: clock)
         self.writer = writer
         undoManager.groupsByEvent = false
         for name in [NSNotification.Name.NSUndoManagerDidUndoChange, .NSUndoManagerDidRedoChange] {
@@ -50,6 +57,7 @@ final class LibraryStore: ObservableObject {
                     try FileManager.default.copyItem(at: storageURL, to: checkpoint)
                 }
             }
+            if FileManager.default.fileExists(atPath: storageURL.path) { _ = try backups.daily(Data(contentsOf: storageURL)) }
             try writer(encoded, storageURL)
             lastPersisted = candidate
             return true
@@ -80,6 +88,66 @@ final class LibraryStore: ObservableObject {
         var candidate = data
         candidate.savedFilters.removeAll { $0.id == id }
         _ = commit(candidate)
+    }
+    @discardableResult func backupNow() -> URL? {
+        guard canSave else { error = "The unreadable library cannot be saved as a verified backup. Restore a valid backup instead."; return nil }
+        do {
+            guard FileManager.default.fileExists(atPath: storageURL.path) || save() else { return nil }
+            return try backups.checkpoint(Data(contentsOf: storageURL), label: "manual")
+        } catch { self.error = "Backup failed: \(error.localizedDescription)"; return nil }
+    }
+    func backupIfNeeded() {
+        guard canSave, FileManager.default.fileExists(atPath: storageURL.path) else { return }
+        do { _ = try backups.daily(Data(contentsOf: storageURL)) }
+        catch { self.error = "Automatic backup failed: \(error.localizedDescription)" }
+    }
+    func prepareImport(_ incoming: LibraryData, policy: DuplicatePolicy, applyRules: Bool = false) throws -> ImportPreview {
+        let preview = try ImportPreview.prepare(incoming, into: data, policy: policy)
+        guard applyRules else { return preview }
+        guard let importRuleProcessor else { throw TransferError(message: "Organization rules are not available.") }
+        var candidate = preview.candidate
+        let imported = Set(candidate.entries.map(\.id)).subtracting(Set(data.entries.map(\.id)))
+        importRuleProcessor(&candidate, imported)
+        try LibraryIntegrity.validate(candidate)
+        return ImportPreview(baseline: preview.baseline, candidate: candidate, added: preview.added, skipped: preview.skipped,
+                             conflicts: preview.conflicts + ["Enabled organization rules were applied to \(imported.count) imported entries in this preview."])
+    }
+    @discardableResult func importLibrary(_ preview: ImportPreview) -> Bool {
+        do {
+            guard canSave, try LibraryIntegrity.fingerprint(data) == preview.baseline else {
+                throw TransferError(message: "The library changed or is unreadable. Generate a fresh import preview.")
+            }
+            try LibraryIntegrity.validate(preview.candidate)
+            if FileManager.default.fileExists(atPath: storageURL.path) {
+                _ = try backups.checkpoint(Data(contentsOf: storageURL), label: "pre-import")
+            }
+            guard commit(preview.candidate) else { return false }
+            undoManager.removeAllActions(); return true
+        } catch { self.error = "Import failed: \(error.localizedDescription)"; return false }
+    }
+    @discardableResult func restoreLibrary(_ bytes: Data) -> Bool {
+        do {
+            guard bytes.count <= LibraryTransfer.maximumImportBytes * 4 else { throw TransferError(message: "Backup is too large.") }
+            let restored = try JSONDecoder().decode(LibraryBackup.self, from: bytes).validated()
+            if FileManager.default.fileExists(atPath: storageURL.path) {
+                let original = try Data(contentsOf: storageURL)
+                if canSave { _ = try backups.checkpoint(original, label: "pre-restore") }
+                else {
+                    try FileManager.default.createDirectory(at: backups.directory, withIntermediateDirectories: true)
+                    try original.write(to: backups.directory.appendingPathComponent("unreadable-\(UUID().uuidString).json"), options: .atomic)
+                }
+            }
+            let previous = canSave; canSave = true
+            // A malformed source has already been preserved separately; avoid treating it as a daily backup.
+            let encoded = try JSONEncoder().encode(restored)
+            do {
+                try FileManager.default.createDirectory(at: storageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try writer(encoded, storageURL)
+            } catch { canSave = previous; throw error }
+            lastPersisted = restored; data = restored; self.error = nil
+            undoManager.removeAllActions(); NotificationCenter.default.post(name: .libraryReplaced, object: self)
+            return true
+        } catch { self.error = "Restore failed: \(error.localizedDescription)"; return false }
     }
     var configuration: ViewConfiguration {
         get { data.configurations[data.view.rawValue] ?? ViewConfiguration() }
@@ -261,3 +329,5 @@ final class LibraryStore: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 }
+
+extension Notification.Name { static let libraryReplaced = Notification.Name("Switchboard.libraryReplaced") }

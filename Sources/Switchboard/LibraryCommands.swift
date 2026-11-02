@@ -40,6 +40,7 @@ final class LibraryWindowState: ObservableObject {
         if let revealedEntry, selection == [revealedEntry], scope == revealScope, query.isEmpty, selectedTags.isEmpty { return }
         revealedEntry = nil; revealScope = nil; selection = []
     }
+    @Published var showLibraryTransfer = false
     @Published var showTags = false
     @Published var showURL = false
     @Published var showCollections = false
@@ -120,6 +121,7 @@ struct LibraryCommands: Commands {
             Button("Quick Launcher Settings…") { openWindow(id: "launcher-settings") }.keyboardShortcut(",")
         }
         CommandGroup(replacing: .newItem) {
+            Button("Import, Export, and Backups…") { window?.showLibraryTransfer = true }.disabled(window == nil)
             Button("Quick Launcher…") { launcher.toggle() }
             Divider()
             Button("Add Files and Folders…") {
