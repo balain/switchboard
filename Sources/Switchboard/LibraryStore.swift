@@ -158,6 +158,21 @@ final class LibraryStore: ObservableObject {
         lastAffectedCount = mutations.count
         return mutations.count
     }
+    @discardableResult func applyEntryChanges(expected: [LibraryEntry], updated: [LibraryEntry], title: String) -> Int {
+        guard expected.count == updated.count, Set(expected.map(\.id)).count == expected.count else {
+            error = "Invalid change set."; return 0
+        }
+        var candidate = data; var mutations: [LibraryMutation] = []
+        for (before, after) in zip(expected, updated) {
+            guard before.id == after.id, candidate.entries.first(where: { $0.id == before.id }) == before else {
+                error = "An entry changed since this preview. Run it again before applying changes."; return 0
+            }
+            if before != after { mutations.append(.update(EntryPatch(before: before, after: after))) }
+        }
+        guard !mutations.isEmpty, mutations.allSatisfy({ $0.apply(to: &candidate, inverse: false) }), commit(candidate) else { return 0 }
+        record(mutations, inverse: true, title: title); lastAffectedCount = mutations.count
+        return mutations.count
+    }
     private func record(_ mutations: [LibraryMutation], inverse: Bool, title: String) {
         let grouping = !undoManager.isUndoing && !undoManager.isRedoing
         if grouping { undoManager.beginUndoGrouping() }

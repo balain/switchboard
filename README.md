@@ -68,6 +68,10 @@ Select multiple entries and use View → Organize Selected, the toolbar, the det
 
 Use File → Quick Launcher… or Control-Option-Space from another application. Change or disable the global shortcut through Switchboard → Quick Launcher Settings…. Keys use documented US physical positions. The panel searches the entire library, ranks name matches ahead of other metadata, and offers Open, Show in Finder, Copy Location, and Show in Switchboard. Up/Down select, Return opens, Command-Return reveals in Switchboard, and Escape dismisses. It remains available after closing library windows while the app is running. Registration failures retain the File menu fallback. No global keyboard event interception is used.
 
+## Library health
+
+Use File → Library Health… to check local references and review duplicates without changing the library. Check Web Links explicitly makes bounded, cookie-free HEAD requests, with a small ranged GET fallback when HEAD is unsupported. Missing files, unavailable volumes, permissions, cloud placeholders, authentication, rate limits, and temporary failures are distinguished. Locate Replacement preserves entry identity and metadata and supports Undo. Removal affects only selected current references; original files remain untouched. Duplicate merging is not automatic: compare the listed metadata and choose which references to keep.
+
 ## Collections
 
 Open **File → Manage Collections…** or **Manage collections…** in the sidebar to add, rename, delete, or choose a collection's icon, background color, and parent collection. Save edits with **Save Changes** or **Done**; changing the selected collection also saves the previous collection's edits. Nesting cycles are prevented.

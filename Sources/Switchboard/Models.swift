@@ -1,6 +1,6 @@
 import Foundation
 
-struct LibraryEntry: Identifiable, Codable, Hashable {
+struct LibraryEntry: Identifiable, Codable, Hashable, Sendable {
     var id = UUID()
     var name: String
     var location: String
@@ -18,7 +18,7 @@ struct LibraryEntry: Identifiable, Codable, Hashable {
     }
 }
 
-enum EntryKind: String, Codable, CaseIterable, Identifiable {
+enum EntryKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case file, folder, url
     var id: String { rawValue }
     var title: String { rawValue == "url" ? "URL" : rawValue.capitalized }
