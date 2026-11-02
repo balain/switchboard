@@ -114,7 +114,7 @@ struct ContentView: View {
         .onChange(of: store.data.savedFilters) { _, _ in window.validate(in: store.data) }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in filterDate = Date() }
         .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in filterDate = Date() }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in filterDate = Date(); if contentQueryActive { contentCacheVersion += 1 } }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in filterDate = Date(); store.backupIfNeeded(); if contentQueryActive { contentCacheVersion += 1 } }
         .sheet(isPresented: $window.showSmartCollections) { SmartCollectionManager(store: store, initial: window.smartDraft) }
         .onChange(of: store.data.tags) { _, _ in window.validate(in: store.data) }
         .onChange(of: window.selectedTags) { _, _ in window.clearSelectionForFilterChange(); selectionAnchor = nil }
@@ -123,6 +123,8 @@ struct ContentView: View {
         .onChange(of: store.data.entries.map(\.id)) { _, _ in window.validate(in: store.data) }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in store.save() }
         .sheet(isPresented: $window.showHealth) { HealthReport(store: store) }
+        .sheet(isPresented: $window.showLibraryTransfer) { LibraryTransferPanel(store: store) }
+        .onReceive(NotificationCenter.default.publisher(for: .libraryReplaced)) { _ in window.validate(in: store.data) }
         .sheet(isPresented: $window.showURL) { AddURLSheet(store: store, collectionID: collectionID) { window.selection = [$0] } }
         .sheet(isPresented: $window.showCollections) { CollectionManager(store: store) }
         .sheet(isPresented: $window.showTags) { TagManager(store: store) }

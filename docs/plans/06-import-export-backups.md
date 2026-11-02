@@ -1,5 +1,7 @@
 # 6. Import, export, and automatic local backups
 
+Status: implemented on `codex/library-portability`. See README for behavior and limits.
+
 ## Outcome and scope
 
 Move data into/out of Switchboard and recover from accidental edits without manually locating `library.json`. Provide portable JSON and bookmark HTML import/export, CSV export, exact local backup, and restore. CSV import is deferred until a column-mapping UI is justified. Inspired by [Raindrop.io import/export and backups](https://raindrop.io/pro/buy).
@@ -32,3 +34,7 @@ Restore validates the entire backup before replacing anything, creates a checkpo
 - Inspect exports to confirm bookmark blobs/preferences are absent; exact backups retain needed local state.
 
 Ship this foundation before other plans introduce new persisted schemas or bulk mutations.
+
+## Implementation validation
+
+Implemented independently from main `f45f88e`. 66 tests pass; release app build and signature verification pass. Native UI created a manual backup, displayed a concrete JSON import preview, and applied it successfully. Tests cover round trips, malformed input, retention, restore recovery, collisions, and failed writes. The optional import-rule hook is ready for feature 7; its UI stays disabled on this independent branch until a processor is available.

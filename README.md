@@ -75,6 +75,9 @@ Use File → Library Health… to check local references and review duplicates w
 ## Document content search
 
 Use View → Search In or the toolbar to choose Metadata, Document Contents, or Both. Both combines metadata and document matches within the active tag/collection/smart scope. Bounded direct extraction supports UTF-8/UTF-16 text and searchable PDFs; text is limited to 1 MB, PDF input to 8 MB/200 pages, and extracted text to 500,000 characters. Unsupported, unavailable, remote, and not-downloaded files are reported as not searched; OCR and web-page indexing are not included. Matching excerpts are highlighted. Refresh rechecks external changes; Clear Cache removes the local, size-limited search cache. Spotlight was prototyped but could not start in this environment, so search does not depend on its index.
+## Import, export, and local backups
+
+Open File → Import, Export, and Backups…. Export portable JSON, URL-only bookmark HTML, or quoted CSV; portable data omits access bookmarks and display preferences. Import JSON or bookmark HTML through a conflict preview that preserves existing entries, remaps colliding IDs and references, and offers skip/keep-both duplicate policies. Local references may need renewed access through a file picker. Imports are limited to 10 MB; backup restore reads up to 40 MB. Daily local snapshots retain 30 days, with separate manual and pre-import/pre-restore checkpoints. Restore validates before replacement, preserves the prior file, clears library Undo, and notifies cache/view consumers. The optional import-rule processor runs only in an explicitly enabled preview and never during restore; it composes with the organization-rules branch.
 
 ## Collections
 

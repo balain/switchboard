@@ -41,6 +41,7 @@ final class LibraryWindowState: ObservableObject {
         revealedEntry = nil; revealScope = nil; selection = []
     }
     @Published var showHealth = false
+    @Published var showLibraryTransfer = false
     @Published var showTags = false
     @Published var showURL = false
     @Published var showCollections = false
@@ -123,6 +124,7 @@ struct LibraryCommands: Commands {
         }
         CommandGroup(replacing: .newItem) {
             Button("Library Health…") { window?.showHealth = true }.disabled(window == nil)
+            Button("Import, Export, and Backups…") { window?.showLibraryTransfer = true }.disabled(window == nil)
             Button("Quick Launcher…") { launcher.toggle() }
             Divider()
             Button("Add Files and Folders…") {
