@@ -186,8 +186,11 @@ enum LibraryLogic {
     }
     static func matches(_ entry: LibraryEntry, query: String) -> Bool {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return query.isEmpty || [entry.name, entry.location, entry.notes, entry.tags.joined(separator: " ")]
+        return query.isEmpty || searchableText(entry)
             .contains { $0.localizedCaseInsensitiveContains(query) }
+    }
+    static func searchableText(_ entry: LibraryEntry) -> [String] {
+        [entry.name, entry.location, entry.notes, entry.tags.joined(separator: " ")]
     }
     static func filtered(_ entries: [LibraryEntry], query: String, sort: EntrySort) -> [LibraryEntry] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)

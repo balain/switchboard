@@ -44,8 +44,8 @@ The toolbar provides adding entries, choosing a display format, configuring the 
 
 | Menu | Commands |
 | --- | --- |
-| File | Add Files and Folders… (Command-O), Add URL…, Manage Collections… |
-| View | Show/Hide Sidebar, Minimal, Minimal Icon Bloom, Show Details Panel, Display Format, Configure Current View…, Appearance, Filter, Sort By, Hierarchical Collections, Show Collection Names, Open Items With |
+| File | Quick Launcher…, Add Files and Folders… (Command-O), Add URL…, Manage Collections…, Manage Tags… |
+| View | Show/Hide Sidebar, Minimal, Minimal Icon Bloom, Show Details Panel, Display Format, Configure Current View…, Appearance, Filter, Collections, Smart Collections, Tags, Organize Selected, Sort By, Hierarchical Collections, Show Collection Names, Open Items With |
 | Edit | Search Library… (Command-F), Clear Search |
 
 **Filter** selects all entries, favorites, files, folders, URLs, or a specific collection. **Sort By** offers name, newest first, or kind. **Appearance** offers System, Light, or Dark.
@@ -63,6 +63,10 @@ Use View → Smart Collections or the toolbar to save the current filters, selec
 ## Bulk organization and Undo
 
 Select multiple entries and use View → Organize Selected, the toolbar, the details panel, or the selection context menu. Add/remove individual tags, set/clear a collection, change favorites, or remove library entries. Actions preserve unrelated tags and fields and use one grouped Undo/Redo operation. All windows share the library history; text editors retain their native editing history. Conflicting history is reported and cleared after the Undo/Redo operation completes. Writes are staged and published only on success, with a one-time `library.json.before-bulk-organization` checkpoint. Original files remain untouched.
+
+## Quick launcher
+
+Use File → Quick Launcher… or Control-Option-Space from another application. Change or disable the global shortcut through Switchboard → Quick Launcher Settings…. Keys use documented US physical positions. The panel searches the entire library, ranks name matches ahead of other metadata, and offers Open, Show in Finder, Copy Location, and Show in Switchboard. Up/Down select, Return opens, Command-Return reveals in Switchboard, and Escape dismisses. It remains available after closing library windows while the app is running. Registration failures retain the File menu fallback. No global keyboard event interception is used.
 
 ## Collections
 
