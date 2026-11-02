@@ -101,6 +101,8 @@ struct ContentView: View {
         .onChange(of: store.data.collections) { _, _ in window.validate(in: store.data) }
         .onChange(of: store.data.entries.map(\.id)) { _, _ in window.validate(in: store.data) }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in store.save() }
+        .sheet(isPresented: $window.showRules) { RuleManager(store: store) }
+        .sheet(isPresented: $window.showRulePreview) { RulePreviewPanel(store: store, ids: window.rulePreviewIDs) }
         .sheet(isPresented: $window.showURL) { AddURLSheet(store: store, collectionID: collectionID) { window.selection = [$0] } }
         .sheet(isPresented: $window.showCollections) { CollectionManager(store: store) }
         .sheet(isPresented: $window.showTags) { TagManager(store: store) }
@@ -250,7 +252,7 @@ struct ContentView: View {
                 if !minimalView {
                     Divider()
                     HStack {
-                        Text(store.data.view.title)
+                        Text(store.lastRuleSummary.isEmpty ? store.data.view.title : store.lastRuleSummary)
                         Spacer()
                         if !window.selection.isEmpty { Text("\(window.selection.count) selected") }
                         Text("Drop files, folders, or links to add")

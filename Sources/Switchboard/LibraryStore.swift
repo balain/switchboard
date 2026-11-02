@@ -7,6 +7,9 @@ import UniformTypeIdentifiers
 final class LibraryStore: ObservableObject {
     @Published var data = LibraryData()
     @Published var error: String?
+    var importRuleProcessor: ((inout LibraryData, Set<UUID>) -> Void)?
+    var importRulesAvailable: Bool { importRuleProcessor != nil }
+    @Published var lastRuleSummary = ""
     @Published var lastAffectedCount = 0
     let undoManager = UndoManager()
     private let storageURL: URL
@@ -20,6 +23,12 @@ final class LibraryStore: ObservableObject {
         self.storageURL = storageURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Switchboard/library.json")
         self.writer = writer
+        self.importRuleProcessor = { candidate, ids in
+            let preview = RuleEngine.preview(entries: candidate.entries.filter { ids.contains($0.id) }, data: candidate, event: .importedEntries)
+            for entry in preview.updated {
+                if let index = candidate.entries.firstIndex(where: { $0.id == entry.id }) { candidate.entries[index] = entry }
+            }
+        }
         undoManager.groupsByEvent = false
         for name in [NSNotification.Name.NSUndoManagerDidUndoChange, .NSUndoManagerDidRedoChange] {
             NotificationCenter.default.publisher(for: name, object: undoManager).sink { [weak self] _ in
@@ -59,7 +68,9 @@ final class LibraryStore: ObservableObject {
         guard persist(data) else { data = lastPersisted; return false }
         return true
     }
-    @discardableResult private func commit(_ candidate: LibraryData) -> Bool {
+    @discardableResult private func commit(_ value: LibraryData) -> Bool {
+        var candidate = value
+        for index in candidate.rules.indices where candidate.rules[index].unavailable(in: candidate) { candidate.rules[index].enabled = false }
         guard persist(candidate) else { return false }
         data = candidate
         return true
@@ -81,6 +92,39 @@ final class LibraryStore: ObservableObject {
         candidate.savedFilters.removeAll { $0.id == id }
         _ = commit(candidate)
     }
+    @discardableResult func putRule(_ value: OrganizationRule) -> Bool {
+        var rule = value; rule.name = rule.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rule.name.isEmpty, !data.rules.contains(where: { $0.id != rule.id && $0.name.caseInsensitiveCompare(rule.name) == .orderedSame }) else {
+            error = "Enter a unique rule name."; return false
+        }
+        if rule.enabled, let problem = rule.validation(in: data) { error = problem; return false }
+        var candidate = data
+        if let index = candidate.rules.firstIndex(where: { $0.id == rule.id }) { candidate.rules[index] = rule }
+        else { candidate.rules.append(rule) }
+        return commit(candidate)
+    }
+    func removeRule(_ id: UUID) { var candidate = data; candidate.rules.removeAll { $0.id == id }; _ = commit(candidate) }
+    func moveRule(_ id: UUID, by offset: Int) {
+        guard let index = data.rules.firstIndex(where: { $0.id == id }), data.rules.indices.contains(index + offset) else { return }
+        var candidate = data; candidate.rules.swapAt(index, index + offset); _ = commit(candidate)
+    }
+    @discardableResult func applyRulePreview(_ preview: RulePreview) -> Int {
+        guard preview.rules == data.rules, preview.tags == data.tags, preview.collections == data.collections,
+              preview.day == Calendar.current.startOfDay(for: Date()) else { error = "Rules or references changed. Generate a fresh preview."; return 0 }
+        let count = applyEntryChanges(expected: preview.expected, updated: preview.updated, title: "Apply Rules")
+        if count > 0 { lastRuleSummary = "Rules changed \(count) entries." }
+        return count
+    }
+    func prepareImportedRules(_ candidate: inout LibraryData, importedIDs: Set<UUID>, enabled: Bool) {
+        if enabled { importRuleProcessor?(&candidate, importedIDs) }
+    }
+    private func applyAdditionRules(_ candidate: inout LibraryData, ids: Set<UUID>, event: RuleEvent = .newEntries) -> [LibraryMutation] {
+        let preview = RuleEngine.preview(entries: candidate.entries.filter { ids.contains($0.id) }, data: candidate, event: event)
+        for entry in preview.updated {
+            if let index = candidate.entries.firstIndex(where: { $0.id == entry.id }) { candidate.entries[index] = entry }
+        }
+        return zip(preview.expected, preview.updated).filter { $0 != $1 }.map { .update(EntryPatch(before: $0.0, after: $0.1)) }
+    }
     var configuration: ViewConfiguration {
         get { data.configurations[data.view.rawValue] ?? ViewConfiguration() }
         set { var candidate = data; candidate.configurations[data.view.rawValue] = newValue; _ = commit(candidate) }
@@ -93,6 +137,7 @@ final class LibraryStore: ObservableObject {
     }
     func add(_ urls: [URL], collectionID: UUID?) {
         var candidate = data
+        let existingIDs = Set(data.entries.map(\.id))
         for url in urls {
             let location = url.isFileURL ? url.standardizedFileURL.path : url.absoluteString
             if candidate.entries.contains(where: { $0.location == location }) { continue }
@@ -102,7 +147,8 @@ final class LibraryStore: ObservableObject {
             candidate.entries.append(LibraryEntry(name: url.isFileURL ? url.lastPathComponent : (url.host ?? location),
                                                   location: location, kind: kind, collectionID: collectionID, bookmark: bookmark))
         }
-        _ = commit(candidate)
+        let changed = applyAdditionRules(&candidate, ids: Set(candidate.entries.map(\.id)).subtracting(existingIDs))
+        if commit(candidate) { if !changed.isEmpty { record(changed, inverse: true, title: "Apply Rules to New Entries") }; lastRuleSummary = "Rules changed \(changed.count) new entries." }
     }
     func addURL(name: String, location: String, collectionID: UUID?) -> UUID? {
         guard let url = LibraryLogic.webURL(location) else { return nil }
@@ -110,7 +156,11 @@ final class LibraryStore: ObservableObject {
         let entry = LibraryEntry(name: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? (url.host ?? location) : name,
                                  location: url.absoluteString, kind: .url, collectionID: collectionID)
         var candidate = data; candidate.entries.append(entry)
-        return commit(candidate) ? entry.id : nil
+        let changed = applyAdditionRules(&candidate, ids: [entry.id])
+        guard commit(candidate) else { return nil }
+        if !changed.isEmpty { record(changed, inverse: true, title: "Apply Rules to New Entries") }
+        lastRuleSummary = "Rules changed \(changed.count) new entries."
+        return entry.id
     }
     func update(_ entry: LibraryEntry, undoable: Bool = true) {
         guard let index = data.entries.firstIndex(where: { $0.id == entry.id }) else { return }
@@ -158,6 +208,21 @@ final class LibraryStore: ObservableObject {
         lastAffectedCount = mutations.count
         return mutations.count
     }
+    @discardableResult func applyEntryChanges(expected: [LibraryEntry], updated: [LibraryEntry], title: String) -> Int {
+        guard expected.count == updated.count, Set(expected.map(\.id)).count == expected.count else {
+            error = "Invalid change set."; return 0
+        }
+        var candidate = data; var mutations: [LibraryMutation] = []
+        for (before, after) in zip(expected, updated) {
+            guard before.id == after.id, candidate.entries.first(where: { $0.id == before.id }) == before else {
+                error = "An entry changed since this preview. Run it again before applying changes."; return 0
+            }
+            if before != after { mutations.append(.update(EntryPatch(before: before, after: after))) }
+        }
+        guard !mutations.isEmpty, mutations.allSatisfy({ $0.apply(to: &candidate, inverse: false) }), commit(candidate) else { return 0 }
+        record(mutations, inverse: true, title: title); lastAffectedCount = mutations.count
+        return mutations.count
+    }
     private func record(_ mutations: [LibraryMutation], inverse: Bool, title: String) {
         let grouping = !undoManager.isUndoing && !undoManager.isRedoing
         if grouping { undoManager.beginUndoGrouping() }
@@ -173,6 +238,7 @@ final class LibraryStore: ObservableObject {
             clearHistoryAfterReplay = true; objectWillChange.send(); return
         }
         guard commit(candidate) else { error = (error ?? "Could not save.") + " Library history was cleared after the failed Undo/Redo."; clearHistoryAfterReplay = true; objectWillChange.send(); return }
+        lastRuleSummary = ""
         record(mutations, inverse: !inverse, title: title)
         lastAffectedCount = mutations.count
     }

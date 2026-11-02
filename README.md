@@ -68,6 +68,10 @@ Select multiple entries and use View → Organize Selected, the toolbar, the det
 
 Use File → Quick Launcher… or Control-Option-Space from another application. Change or disable the global shortcut through Switchboard → Quick Launcher Settings…. Keys use documented US physical positions. The panel searches the entire library, ranks name matches ahead of other metadata, and offers Open, Show in Finder, Copy Location, and Show in Switchboard. Up/Down select, Return opens, Command-Return reveals in Switchboard, and Escape dismisses. It remains available after closing library windows while the app is running. Registration failures retain the File menu fallback. No global keyboard event interception is used.
 
+## Organization rules
+
+Use View → Rules to manage ordered rules or preview them against selected/all entries. New rules start disabled. Conditions include metadata, name/location, kind, extension, exact host, folder ancestry, favorite state, and tags; actions add/remove tags, set/clear a collection, or change favorites. Later assignments win unless processing stops, and preview shows overriding assignments. New additions apply rules once in the staged transaction; Undo can reverse those rule effects without removing the new entry. Manual previews revalidate entries and configuration before one grouped Undo operation. Deleting referenced tags/collections disables affected rules. The import processor is opt-in and composes with the import/export branch; normal edits, Undo, bookmark repair, and restore do not trigger rules.
+
 ## Collections
 
 Open **File → Manage Collections…** or **Manage collections…** in the sidebar to add, rename, delete, or choose a collection's icon, background color, and parent collection. Save edits with **Save Changes** or **Done**; changing the selected collection also saves the previous collection's edits. Nesting cycles are prevented.
