@@ -10,7 +10,7 @@ enum LibraryIntegrity {
     static func validate(_ data: LibraryData) throws {
         func unique<T: Hashable>(_ values: [T]) -> Bool { Set(values).count == values.count }
         guard unique(data.entries.map(\.id)), unique(data.collections.map(\.id)), unique(data.tags.map(\.id)),
-              unique(data.savedFilters.map(\.id)) else { throw TransferError(message: "Duplicate identifiers in library data.") }
+              unique(data.savedFilters.map(\.id)), unique(data.rules.map(\.id)) else { throw TransferError(message: "Duplicate identifiers in library data.") }
         let collections = Set(data.collections.map(\.id))
         guard data.entries.allSatisfy({ $0.collectionID == nil || collections.contains($0.collectionID!) }),
               data.collections.allSatisfy({ $0.parentID == nil || collections.contains($0.parentID!) }) else {
@@ -39,17 +39,18 @@ struct PortableLibrary: Codable {
     var collections: [LibraryCollection]
     var tags: [LibraryTag]
     var savedFilters: [SavedFilter]
+    var rules: [OrganizationRule]?
     init(_ data: LibraryData) {
         entries = data.entries.map { var entry = $0; entry.bookmark = nil; return entry }
-        collections = data.collections; tags = data.tags; savedFilters = data.savedFilters
+        collections = data.collections; tags = data.tags; savedFilters = data.savedFilters; rules = data.rules
     }
     func library() throws -> LibraryData {
         guard schemaVersion == 1 else { throw TransferError(message: "Unsupported portable library version \(schemaVersion).") }
-        guard entries.count <= 10_000, collections.count <= 5_000, tags.count <= 5_000, savedFilters.count <= 5_000 else {
+        guard entries.count <= 10_000, collections.count <= 5_000, tags.count <= 5_000, savedFilters.count <= 5_000, (rules?.count ?? 0) <= 5_000 else {
             throw TransferError(message: "Import exceeds the supported item limit.")
         }
         var data = LibraryData(); data.entries = entries.map { var entry = $0; entry.bookmark = nil; return entry }
-        data.collections = collections; data.tags = tags; data.savedFilters = savedFilters
+        data.collections = collections; data.tags = tags; data.savedFilters = savedFilters; data.rules = rules ?? []
         for index in data.entries.indices {
             if data.entries[index].kind == .url {
                 guard let url = LibraryLogic.webURL(data.entries[index].location) else { throw TransferError(message: "Imported URL must use HTTP or HTTPS.") }
@@ -66,6 +67,7 @@ struct PortableLibrary: Codable {
             }
             data.entries[index].tags = names
         }
+        for index in data.rules.indices where data.rules[index].unavailable(in: data) { data.rules[index].enabled = false }
         try LibraryIntegrity.validate(data)
         return data
     }
@@ -167,6 +169,17 @@ struct ImportPreview {
             for id in saved.criteria.tagIDs.union(saved.criteria.additionalTags.flatMap { $0.ids }) where tagMap[id] == nil { tagMap[id] = UUID() }
             if let id = saved.criteria.collectionID, collectionMap[id] == nil { collectionMap[id] = UUID() }
         }
+        for rule in incoming.rules {
+            for id in rule.criteria.tagIDs.union(rule.criteria.additionalTags.flatMap { $0.ids }) where tagMap[id] == nil { tagMap[id] = UUID() }
+            if let id = rule.criteria.collectionID, collectionMap[id] == nil { collectionMap[id] = UUID() }
+            for action in rule.actions {
+                switch action {
+                case .addTag(let id), .removeTag(let id): if tagMap[id] == nil { tagMap[id] = UUID() }
+                case .collection(let id): if let id, collectionMap[id] == nil { collectionMap[id] = UUID() }
+                case .favorite: break
+                }
+            }
+        }
         for saved in incoming.savedFilters {
             var copy = saved
             if candidate.savedFilters.contains(where: { $0.id == copy.id }) { copy.id = UUID() }
@@ -178,6 +191,28 @@ struct ImportPreview {
             copy.criteria.tagIDs = Set(copy.criteria.tagIDs.map { tagMap[$0] ?? $0 })
             for i in copy.criteria.additionalTags.indices { copy.criteria.additionalTags[i].ids = Set(copy.criteria.additionalTags[i].ids.map { tagMap[$0] ?? $0 }) }
             candidate.savedFilters.append(copy)
+        }
+        for rule in incoming.rules {
+            var copy = rule
+            if candidate.rules.contains(where: { $0.id == copy.id }) { copy.id = UUID() }
+            let base = copy.name; var suffix = 2
+            while candidate.rules.contains(where: { $0.name.caseInsensitiveCompare(copy.name) == .orderedSame }) {
+                copy.name = base + " imported \(suffix)"; suffix += 1
+            }
+            if let id = copy.criteria.collectionID { copy.criteria.collectionID = collectionMap[id] ?? id }
+            copy.criteria.tagIDs = Set(copy.criteria.tagIDs.map { tagMap[$0] ?? $0 })
+            for i in copy.criteria.additionalTags.indices { copy.criteria.additionalTags[i].ids = Set(copy.criteria.additionalTags[i].ids.map { tagMap[$0] ?? $0 }) }
+            copy.actions = copy.actions.map { action in
+                switch action {
+                case .addTag(let id): .addTag(tagMap[id] ?? id)
+                case .removeTag(let id): .removeTag(tagMap[id] ?? id)
+                case .collection(let id): .collection(id.map { collectionMap[$0] ?? $0 })
+                case .favorite(let value): .favorite(value)
+                }
+            }
+            // Imported automation requires a separate review before future additions may trigger it.
+            copy.enabled = false
+            candidate.rules.append(copy)
         }
         try LibraryIntegrity.validate(candidate)
         return ImportPreview(baseline: try LibraryIntegrity.fingerprint(existing), candidate: candidate, added: added, skipped: skipped, conflicts: conflicts)

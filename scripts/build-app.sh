@@ -1,7 +1,7 @@
 #!/bin/zsh
 set -euo pipefail
 cd "${0:A:h:h}"
-app_version="${APP_VERSION:-1.0.2}"
+app_version="${APP_VERSION:-1.1.0}"
 app_build="${APP_BUILD_NUMBER:-1}"
 if [[ ! "$app_version" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' || ! "$app_build" =~ '^[0-9]+$' ]]; then
     print -u2 "APP_VERSION must be MAJOR.MINOR.PATCH and APP_BUILD_NUMBER must be numeric."
@@ -25,7 +25,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>Switchboard</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.0.2</string>
+<key>CFBundleShortVersionString</key><string>1.1.0</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>LSMinimumSystemVersion</key><string>14.4</string>
 <key>NSHighResolutionCapable</key><true/>

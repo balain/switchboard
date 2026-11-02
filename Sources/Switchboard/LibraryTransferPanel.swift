@@ -15,7 +15,7 @@ struct LibraryTransferPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Import, Export, and Backups").font(.title2.weight(.semibold))
-            Text("Portable exports include names, paths, URLs, notes, tags, collections, and smart filters. Bookmarks and display preferences stay local.")
+            Text("Portable exports include names, paths, URLs, notes, tags, collections, smart filters, and rules. Bookmarks and display preferences stay local.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Picker("Export", selection: $format) { ForEach(TransferFormat.allCases) { Text($0.title).tag($0) } }
@@ -31,7 +31,7 @@ struct LibraryTransferPanel: View {
             }
             if let preview {
                 Text("Preview: \(preview.added) entries added, \(preview.skipped) duplicate references skipped.").font(.headline)
-                Text("Existing entries are preserved. Imported local files have no access bookmarks; use the file picker to grant access if needed.").font(.caption)
+                Text("Existing entries are preserved. Imported rules start disabled. Imported local files have no access bookmarks; use the file picker to grant access if needed.").font(.caption)
                 ScrollView {
                     LazyVStack(alignment: .leading) {
                         ForEach(Array(preview.conflicts.enumerated()), id: \.offset) { _, item in Text(item).font(.caption) }

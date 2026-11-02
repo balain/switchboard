@@ -37,4 +37,4 @@ Ship this foundation before other plans introduce new persisted schemas or bulk 
 
 ## Implementation validation
 
-Implemented independently from main `f45f88e`. 66 tests pass; release app build and signature verification pass. Native UI created a manual backup, displayed a concrete JSON import preview, and applied it successfully. Tests cover round trips, malformed input, retention, restore recovery, collisions, and failed writes. The optional import-rule hook is ready for feature 7; its UI stays disabled on this independent branch until a processor is available.
+Implemented independently from main `f45f88e`. 66 tests pass; release app build and signature verification pass. Native UI created a manual backup, displayed a concrete JSON import preview, and applied it successfully. Tests cover round trips, malformed input, retention, restore recovery, collisions, and failed writes. Integrated with feature 7: portable rules and references round-trip, imported rules start disabled, and applying existing rules requires explicit import opt-in.

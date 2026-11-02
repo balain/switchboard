@@ -153,7 +153,7 @@ final class LibraryStore: ObservableObject {
                 try FileManager.default.createDirectory(at: storageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try writer(encoded, storageURL)
             } catch { canSave = previous; throw error }
-            lastPersisted = restored; data = restored; self.error = nil
+            lastPersisted = restored; data = restored; self.error = nil; lastRuleSummary = ""
             undoManager.removeAllActions(); NotificationCenter.default.post(name: .libraryReplaced, object: self)
             return true
         } catch { self.error = "Restore failed: \(error.localizedDescription)"; return false }

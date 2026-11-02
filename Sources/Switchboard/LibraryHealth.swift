@@ -128,7 +128,7 @@ struct LibraryHealthScanner: Sendable {
     func scan(_ entries: [LibraryEntry], includeWeb: Bool, scanner: LibraryHealthScanner = LibraryHealthScanner()) {
         cancel(); let id = UUID(); generation = id; findings = []; completed = 0; total = entries.count; running = true
         latest = Dictionary(entries.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        task = Task {
+        task = Task { [weak self] in
             await scanner.scan(entries, includeWeb: includeWeb) { [weak self] finding in
                 await MainActor.run {
                     guard let self, self.generation == id else { return }
@@ -138,7 +138,8 @@ struct LibraryHealthScanner: Sendable {
                     self.findings.append(HealthFinding(entry: finding.entry, check: finding.check, duplicates: duplicates, checked: finding.checked))
                 }
             }
-            if generation == id { running = false; message = "Checked \(completed) of \(total) references." }
+            guard let self, self.generation == id else { return }
+            self.running = false; self.message = "Checked \(self.completed) of \(self.total) references."
         }
     }
     func cancel() { generation = UUID(); task?.cancel(); task = nil; running = false }

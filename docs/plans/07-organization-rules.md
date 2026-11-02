@@ -37,4 +37,4 @@ Deliver after shared predicates and bulk transactions. Keep trigger semantics na
 
 ## Implementation validation
 
-Implemented independently from main `f45f88e`. 64 tests pass; release app build and signature verification pass. Native UI saved an enabled rule, previewed four changes, applied them, and reversed them in one Undo. Tests cover ordered actions, stop behavior, automatic additions, stale previews, missing references, failure rollback, and legacy decoding. The import processor is prepared for feature 6 integration; portable rule export requires combining the branches.
+Implemented independently from main `f45f88e`. 64 tests pass; release app build and signature verification pass. Native UI saved an enabled rule, previewed four changes, applied them, and reversed them in one Undo. Tests cover ordered actions, stop behavior, automatic additions, stale previews, missing references, failure rollback, and legacy decoding. Integrated with feature 6: import previews can apply existing enabled rules explicitly, portable rules start disabled, and backup restore preserves configuration without executing rules.
