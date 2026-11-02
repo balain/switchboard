@@ -182,10 +182,13 @@ enum LibraryLogic {
               let host = url.host, !host.isEmpty, !host.contains(" ") else { return nil }
         return url
     }
+    static func searchableText(_ entry: LibraryEntry) -> [String] {
+        [entry.name, entry.location, entry.notes, entry.tags.joined(separator: " ")]
+    }
     static func filtered(_ entries: [LibraryEntry], query: String, sort: EntrySort) -> [LibraryEntry] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return entries.filter {
-            query.isEmpty || [$0.name, $0.location, $0.notes, $0.tags.joined(separator: " ")]
+            query.isEmpty || searchableText($0)
                 .contains { $0.localizedCaseInsensitiveContains(query) }
         }.sorted {
             switch sort {

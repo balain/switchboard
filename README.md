@@ -56,6 +56,10 @@ The toolbar provides adding entries, choosing a display format, configuring the 
 
 Single-click or double-click opening applies to entries in every display format. Command-click supports card/thumbnail multiselection; Command-click and Shift-click do not open entries. Right-click an item for opening, revealing in Finder, copying its location, changing favorite status, moving between collections, or removing it from the library. Hover panels dismiss when you click, scroll, type, or open a menu.
 
+## Quick launcher
+
+Use File → Quick Launcher… or Control-Option-Space from another application. Change or disable the global shortcut through Switchboard → Quick Launcher Settings…. Keys use documented US physical positions. The panel searches the entire library, ranks name matches ahead of other metadata, and offers Open, Show in Finder, Copy Location, and Show in Switchboard. Up/Down select, Return opens, Command-Return reveals in Switchboard, and Escape dismisses. It remains available after closing library windows while the app is running. Registration failures retain the File menu fallback. No global keyboard event interception is used.
+
 ## Collections
 
 Open **File → Manage Collections…** or **Manage collections…** in the sidebar to add, rename, delete, or choose a collection's icon, background color, and parent collection. Save edits with **Save Changes** or **Done**; changing the selected collection also saves the previous collection's edits. Nesting cycles are prevented.

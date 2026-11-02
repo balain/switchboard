@@ -2,6 +2,7 @@ import SwiftUI
 
 @MainActor
 final class LibraryWindowState: ObservableObject {
+    let windowID = UUID()
     private let defaults: UserDefaults
     @Published var scope: String { didSet { defaults.set(scope, forKey: "activeScope") } }
     @Published var query: String { didSet { defaults.set(query, forKey: "activeSearch") } }
@@ -21,6 +22,18 @@ final class LibraryWindowState: ObservableObject {
     }
     @Published var tagMatch: TagMatch {
         didSet { defaults.set(tagMatch.rawValue, forKey: "tagMatch") }
+    }
+    private var revealedEntry: UUID?
+    private var revealScope: String?
+    func reveal(_ entry: LibraryEntry) {
+        revealedEntry = entry.id
+        revealScope = entry.collectionID?.uuidString ?? "all"
+        scope = revealScope ?? "all"; query = ""; selectedTags = []
+        selection = [entry.id]; showInspector = true
+    }
+    func clearSelectionForFilterChange() {
+        if let revealedEntry, selection == [revealedEntry], scope == revealScope, query.isEmpty, selectedTags.isEmpty { return }
+        revealedEntry = nil; revealScope = nil; selection = []
     }
     @Published var showTags = false
     @Published var showURL = false
@@ -54,6 +67,8 @@ final class LibraryWindowState: ObservableObject {
 
 struct LibraryCommands: Commands {
     @ObservedObject var store: LibraryStore
+    @ObservedObject var launcher: QuickLauncherCoordinator
+    @Environment(\.openWindow) private var openWindow
     @FocusedObject private var window: LibraryWindowState?
     @AppStorage("minimalView") private var minimal = false
     @AppStorage("minimalIconBloom") private var minimalIconBloom = true
@@ -66,7 +81,12 @@ struct LibraryCommands: Commands {
     }
 
     var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            Button("Quick Launcher Settings…") { openWindow(id: "launcher-settings") }.keyboardShortcut(",")
+        }
         CommandGroup(replacing: .newItem) {
+            Button("Quick Launcher…") { launcher.toggle() }
+            Divider()
             Button("Add Files and Folders…") {
                 store.importFiles(collectionID: window.flatMap { UUID(uuidString: $0.scope) })
             }.keyboardShortcut("o").disabled(window == nil)

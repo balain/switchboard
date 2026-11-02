@@ -3,15 +3,24 @@ import AppKit
 
 @main
 struct SwitchboardApp: App {
-    @StateObject private var store = LibraryStore()
+    @NSApplicationDelegateAdaptor(LauncherAppDelegate.self) private var appDelegate
+    @StateObject private var store: LibraryStore
+    @StateObject private var launcher: QuickLauncherCoordinator
+    init() {
+        let store = LibraryStore()
+        _store = StateObject(wrappedValue: store)
+        _launcher = StateObject(wrappedValue: QuickLauncherCoordinator(store: store))
+    }
     var body: some Scene {
-        WindowGroup {
-            ContentView(store: store)
+        WindowGroup(id: "library") {
+            ContentView(store: store, launcher: launcher)
                 .frame(minWidth: 900, minHeight: 320.0 / 3.0)
                 .preferredColorScheme(store.data.appearance == "system" ? nil : store.data.appearance == "dark" ? .dark : .light)
         }
         .defaultSize(width: 1250, height: 790)
-        .commands { SidebarCommands(); LibraryCommands(store: store) }
+        .commands { SidebarCommands(); LibraryCommands(store: store, launcher: launcher) }
+        Window("Quick Launcher Settings", id: "launcher-settings") { LauncherSettings(launcher: launcher) }
+            .windowResizability(.contentSize)
     }
 }
 
@@ -26,6 +35,7 @@ extension ViewConfiguration {
 
 struct ContentView: View {
     @ObservedObject var store: LibraryStore
+    let launcher: QuickLauncherCoordinator
     @AppStorage("minimalView") private var minimalView = false
     @AppStorage("minimalIconBloom") private var minimalIconBloom = true
     @StateObject private var window = LibraryWindowState()
@@ -63,13 +73,14 @@ struct ContentView: View {
         NavigationSplitView(columnVisibility: $window.columnVisibility) { sidebar } detail: { detail }
         .toolbar(minimalView ? .hidden : .automatic, for: .windowToolbar)
         .focusedSceneObject(window)
+        .background(LauncherWindowBridge(launcher: launcher, state: window))
         .tint(store.configuration.palette.color)
         .onChange(of: store.data.view) { _, _ in store.save() }
         .onChange(of: store.data.sort) { _, _ in store.save() }
-        .onChange(of: window.scope) { _, _ in window.selection.removeAll() }
+        .onChange(of: window.scope) { _, _ in window.clearSelectionForFilterChange() }
         .onAppear { window.validate(in: store.data) }
         .onChange(of: store.data.tags) { _, _ in window.validate(in: store.data) }
-        .onChange(of: window.selectedTags) { _, _ in window.selection.removeAll() }
+        .onChange(of: window.selectedTags) { _, _ in window.clearSelectionForFilterChange() }
         .onChange(of: window.tagMatch) { _, _ in window.selection.removeAll() }
         .onChange(of: store.data.collections) { _, _ in window.validate(in: store.data) }
         .onChange(of: store.data.entries.map(\.id)) { _, _ in window.validate(in: store.data) }
@@ -479,4 +490,8 @@ struct EntryTile: View {
         .background(selected ? configuration.palette.color.opacity(0.09) : Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
         .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? configuration.palette.color : Color.primary.opacity(0.09), lineWidth: selected ? 2 : 1) }
     }
+}
+
+final class LauncherAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }

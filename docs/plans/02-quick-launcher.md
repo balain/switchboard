@@ -1,5 +1,7 @@
 # 2. Global quick launcher
 
+Status: implemented in the `codex/quick-launcher` worktree. Includes focused regression coverage and legacy behavior checks.
+
 ## Outcome and scope
 
 A configurable global shortcut opens a small search panel over the current application. Type a name, navigate with arrow keys, and press Return to open a file, folder, or URL. Escape dismisses the panel and returns focus to the previous app. Inspired by [Anybox Quick Find](https://anybox.app/getting-started#easy-out).
@@ -32,3 +34,7 @@ Keep preferences local: enablement, shortcut, and optional panel position. Openi
 - Measure metadata query latency on a synthetic 10,000-entry library; target visible results within 100 ms on documented test hardware.
 
 API selection and panel activation behavior need an early prototype. Confirm current Apple documentation during implementation.
+
+## Implementation validation
+
+The branch has 40 passing XCTest cases and builds a signed release app. Verified the search panel, ranked results, Show in Switchboard, reopening a closed library window, shortcut settings, and successful system hotkey registration using an isolated sample library. Actual hardware hotkey dispatch from another app, full-screen Spaces, and multiple physical displays remain manual release checks; targeted UI automation did not trigger the system-wide hotkey.
