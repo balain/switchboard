@@ -22,6 +22,7 @@ final class LibraryWindowState: ObservableObject {
     @Published var tagMatch: TagMatch {
         didSet { defaults.set(tagMatch.rawValue, forKey: "tagMatch") }
     }
+    @Published var removeSelection: Set<UUID> = []
     @Published var showTags = false
     @Published var showURL = false
     @Published var showCollections = false
@@ -54,6 +55,7 @@ final class LibraryWindowState: ObservableObject {
 
 struct LibraryCommands: Commands {
     @ObservedObject var store: LibraryStore
+    @StateObject private var undoRouting = UndoRouting()
     @FocusedObject private var window: LibraryWindowState?
     @AppStorage("minimalView") private var minimal = false
     @AppStorage("minimalIconBloom") private var minimalIconBloom = true
@@ -66,6 +68,11 @@ struct LibraryCommands: Commands {
     }
 
     var body: some Commands {
+        CommandGroup(replacing: .undoRedo) {
+            let manager = undoRouting.manager(fallback: store.undoManager)
+            Button(manager.undoMenuItemTitle) { manager.undo() }.keyboardShortcut("z").disabled(!manager.canUndo)
+            Button(manager.redoMenuItemTitle) { manager.redo() }.keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!manager.canRedo)
+        }
         CommandGroup(replacing: .newItem) {
             Button("Add Files and Folders…") {
                 store.importFiles(collectionID: window.flatMap { UUID(uuidString: $0.scope) })
@@ -109,6 +116,11 @@ struct LibraryCommands: Commands {
             Menu("Tags") {
                 if let window { TagFilterMenu(store: store, window: window) }
             }.disabled(window == nil)
+            Menu("Organize Selected") {
+                if let window {
+                    BulkActions(store: store, ids: window.selection) { window.removeSelection = $0 }
+                }
+            }.disabled(window?.selection.isEmpty != false)
             Menu("Sort By") {
                 Picker("Sort By", selection: Binding(get: { store.data.sort }, set: { store.data.sort = $0; store.save() })) {
                     ForEach(EntrySort.allCases) { Text($0.title).tag($0) }

@@ -32,7 +32,11 @@ struct ContentView: View {
     @AppStorage("hierarchicalCollections") private var hierarchical = false
     @AppStorage("showCollectionNames") private var showCollectionNames = true
     @AppStorage("singleClickOpen") private var singleClick = false
-    @State private var removeIDs: Set<UUID> = []
+    @State private var selectionAnchor: UUID?
+    private var removeIDs: Set<UUID> {
+        get { window.removeSelection }
+        nonmutating set { window.removeSelection = newValue }
+    }
     @State private var dropTarget = false
     var collectionID: UUID? { UUID(uuidString: window.scope) }
     var title: String {
@@ -66,7 +70,7 @@ struct ContentView: View {
         .tint(store.configuration.palette.color)
         .onChange(of: store.data.view) { _, _ in store.save() }
         .onChange(of: store.data.sort) { _, _ in store.save() }
-        .onChange(of: window.scope) { _, _ in window.selection.removeAll() }
+        .onChange(of: window.scope) { _, _ in window.selection.removeAll(); selectionAnchor = nil }
         .onAppear { window.validate(in: store.data) }
         .onChange(of: store.data.tags) { _, _ in window.validate(in: store.data) }
         .onChange(of: window.selectedTags) { _, _ in window.selection.removeAll() }
@@ -85,7 +89,7 @@ struct ContentView: View {
         }
         .alert("Remove from library?", isPresented: Binding(get: { !removeIDs.isEmpty }, set: { if !$0 { removeIDs = [] } })) {
             Button("Cancel", role: .cancel) { removeIDs = [] }
-            Button("Remove", role: .destructive) { store.remove(removeIDs); window.selection.subtract(removeIDs); removeIDs = [] }
+            Button("Remove", role: .destructive) { if store.remove(removeIDs) > 0 { window.validate(in: store.data) }; removeIDs = [] }
         } message: { Text("Original files and folders will remain on disk.") }
         .alert("Switchboard", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("OK") { store.error = nil }
@@ -225,6 +229,8 @@ struct ContentView: View {
                    let entry = store.data.entries.first(where: { $0.id == id }) {
                     EntryInspector(store: store, entry: entry, remove: { removeIDs = [entry.id] })
                         .id(entry.id)
+                } else if window.selection.count > 1 {
+                    BulkInspector(store: store, ids: window.selection) { removeIDs = $0 }
                 } else {
                     ContentUnavailableView("Entry details", systemImage: "sidebar.right", description: Text("Select one entry to view and edit its details."))
                 }
@@ -242,6 +248,9 @@ struct ContentView: View {
                     Menu { CollectionFilterMenu(store: store, window: window) } label: { Label("Collections", systemImage: "folder") }
                         .help("Select or manage collections")
                     Menu { TagFilterMenu(store: store, window: window) } label: { Label("Filter by tags", systemImage: "tag") }
+                    Menu("Organize Selected", systemImage: "square.stack.3d.up") {
+                        BulkActions(store: store, ids: window.selection) { removeIDs = $0 }
+                    }.disabled(window.selection.isEmpty).help("Organize selected entries")
                     Button { window.showSettings.toggle() } label: { Label("Configure view", systemImage: "slider.horizontal.3") }
                     Button { window.showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.right") }
                 }
@@ -319,11 +328,7 @@ struct ContentView: View {
         content()
             .contentShape(Rectangle())
             .entryHoverInfo(entry, collection: collectionName(for: entry))
-            .gesture(TapGesture(count: singleClick ? 1 : 2).exclusively(before: TapGesture()).onEnded { action in
-                select(entry.id)
-                if case .first = action,
-                   NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty { store.open(entry) }
-            })
+            .modifier(EntryClickInteraction(singleClick: singleClick, select: { select(entry.id, modifiers: $0) }, open: { store.open(entry) }))
             .contextMenu { entryMenu(entry) }
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isButton)
@@ -356,7 +361,7 @@ struct ContentView: View {
             }
         }.listStyle(.inset)
         .contextMenu(forSelectionType: UUID.self) { ids in
-            Button("Remove Selected…", role: .destructive) { removeIDs = ids }.disabled(ids.isEmpty)
+            BulkActions(store: store, ids: ids) { removeIDs = $0 }.disabled(ids.isEmpty)
         } primaryAction: { ids in
             if !singleClick || NSApp.currentEvent?.type == .keyDown {
                 for entry in entries where ids.contains(entry.id) { store.open(entry) }
@@ -400,7 +405,7 @@ struct ContentView: View {
         .font(store.configuration.font)
         .contextMenu(forSelectionType: UUID.self) { ids in
             if let entry = entries.first(where: { ids.contains($0.id) }), ids.count == 1 { entryMenu(entry) }
-            else { Button("Remove Selected…", role: .destructive) { removeIDs = ids }.disabled(ids.isEmpty) }
+            else { BulkActions(store: store, ids: ids) { removeIDs = $0 }.disabled(ids.isEmpty) }
         } primaryAction: { ids in
             if !singleClick || NSApp.currentEvent?.type == .keyDown {
                 for entry in entries where ids.contains(entry.id) { store.open(entry) }
@@ -410,12 +415,21 @@ struct ContentView: View {
     func openOnSingleClick(_ entry: LibraryEntry) {
         if singleClick, NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty { store.open(entry) }
     }
-    func select(_ id: UUID) {
-        if NSEvent.modifierFlags.contains(.command) {
-            if window.selection.contains(id) { window.selection.remove(id) } else { window.selection.insert(id) }
-        } else { window.selection = [id] }
+    func select(_ id: UUID, modifiers: NSEvent.ModifierFlags = NSEvent.modifierFlags) {
+        if modifiers.contains(.command) {
+            if window.selection.contains(id) { window.selection.remove(id) } else { window.selection.insert(id) }; selectionAnchor = id
+        } else if modifiers.contains(.shift),
+                  let anchor = selectionAnchor, let start = entries.firstIndex(where: { $0.id == anchor }),
+                  let end = entries.firstIndex(where: { $0.id == id }) {
+            window.selection = Set(entries[min(start, end)...max(start, end)].map(\.id))
+        } else { window.selection = [id]; selectionAnchor = id }
     }
     @ViewBuilder func entryMenu(_ entry: LibraryEntry) -> some View {
+        if window.selection.contains(entry.id), window.selection.count > 1 {
+            BulkActions(store: store, ids: window.selection) { removeIDs = $0 }
+        } else { singleEntryMenu(entry) }
+    }
+    @ViewBuilder func singleEntryMenu(_ entry: LibraryEntry) -> some View {
         Button("Open") { store.open(entry) }
         if entry.kind != .url { Button("Show in Finder") { store.reveal(entry) } }
         Button("Copy Location") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(entry.location, forType: .string) }
