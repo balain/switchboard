@@ -5,10 +5,12 @@ import AppKit
 struct SwitchboardApp: App {
     @NSApplicationDelegateAdaptor(LauncherAppDelegate.self) private var appDelegate
     @StateObject private var store: LibraryStore
+    @StateObject private var vivaldi: VivaldiSyncCoordinator
     @StateObject private var launcher: QuickLauncherCoordinator
     init() {
         let store = LibraryStore()
         _store = StateObject(wrappedValue: store)
+        _vivaldi = StateObject(wrappedValue: VivaldiSyncCoordinator(store: store))
         _launcher = StateObject(wrappedValue: QuickLauncherCoordinator(store: store))
     }
     var body: some Scene {
@@ -19,6 +21,8 @@ struct SwitchboardApp: App {
         }
         .defaultSize(width: 1250, height: 790)
         .commands { SidebarCommands(); LibraryCommands(store: store, launcher: launcher) }
+        Window("Vivaldi Bookmark Sync", id: "vivaldi-sync") { VivaldiSyncSettings(sync: vivaldi) }
+            .windowResizability(.contentSize)
         Window("Quick Launcher Settings", id: "launcher-settings") { LauncherSettings(launcher: launcher) }
             .windowResizability(.contentSize)
     }

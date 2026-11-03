@@ -68,6 +68,10 @@ Select multiple entries and use View → Organize Selected, the toolbar, the det
 
 Use File → Quick Launcher… or Control-Option-Space from another application. Change or disable the global shortcut through Switchboard → Quick Launcher Settings…. Keys use documented US physical positions. The panel searches the entire library, ranks name matches ahead of other metadata, and offers Open, Show in Finder, Copy Location, and Show in Switchboard. Up/Down select, Return opens, Command-Return reveals in Switchboard, and Escape dismisses. It remains available after closing library windows while the app is running. Registration failures retain the File menu fallback. No global keyboard event interception is used.
 
+## Vivaldi bookmark sync
+
+Use File → Vivaldi Bookmark Sync… to pair the bundled companion extension. Choose all bookmarks or any combination of bookmarks and folders in Vivaldi. Titles, URLs, hierarchy, additions, and deletions sync in both directions while both apps run. Concurrent changes pause for review, large deletions need approval, and both sides retain recovery snapshots. See [setup, scope, and recovery instructions](docs/VIVALDI-SYNC.md).
+
 ## Library health
 
 Use File → Library Health… to check local references and review duplicates without changing the library. Check Web Links explicitly makes bounded, cookie-free HEAD requests, with a small ranged GET fallback when HEAD is unsupported. Missing files, unavailable volumes, permissions, cloud placeholders, authentication, rate limits, and temporary failures are distinguished. Locate Replacement preserves entry identity and metadata and supports Undo. Removal affects only selected current references; original files remain untouched. Duplicate merging is not automatic: compare the listed metadata and choose which references to keep.

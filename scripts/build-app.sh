@@ -1,7 +1,7 @@
 #!/bin/zsh
 set -euo pipefail
 cd "${0:A:h:h}"
-app_version="${APP_VERSION:-1.1.0}"
+app_version="${APP_VERSION:-1.1.1}"
 app_build="${APP_BUILD_NUMBER:-1}"
 if [[ ! "$app_version" =~ '^[0-9]+\.[0-9]+\.[0-9]+$' || ! "$app_build" =~ '^[0-9]+$' ]]; then
     print -u2 "APP_VERSION must be MAJOR.MINOR.PATCH and APP_BUILD_NUMBER must be numeric."
@@ -14,6 +14,8 @@ APP="$PWD/dist/Switchboard.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cp LICENSE "$APP/Contents/Resources/LICENSE"
+mkdir -p "$APP/Contents/Resources/VivaldiExtension"
+cp Extensions/Vivaldi/* "$APP/Contents/Resources/VivaldiExtension/"
 cp .build/release/Switchboard "$APP/Contents/MacOS/Switchboard"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -25,7 +27,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleExecutable</key><string>Switchboard</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.1.0</string>
+<key>CFBundleShortVersionString</key><string>1.1.1</string>
 <key>CFBundleVersion</key><string>1</string>
 <key>LSMinimumSystemVersion</key><string>14.4</string>
 <key>NSHighResolutionCapable</key><true/>

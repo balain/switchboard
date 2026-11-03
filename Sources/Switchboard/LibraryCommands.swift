@@ -126,6 +126,7 @@ struct LibraryCommands: Commands {
             Button("Quick Launcher Settings…") { openWindow(id: "launcher-settings") }.keyboardShortcut(",")
         }
         CommandGroup(replacing: .newItem) {
+            Button("Vivaldi Bookmark Sync…") { openWindow(id: "vivaldi-sync") }
             Button("Library Health…") { window?.showHealth = true }.disabled(window == nil)
             Button("Import, Export, and Backups…") { window?.showLibraryTransfer = true }.disabled(window == nil)
             Button("Quick Launcher…") { launcher.toggle() }

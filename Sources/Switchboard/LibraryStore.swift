@@ -98,6 +98,19 @@ final class LibraryStore: ObservableObject {
         candidate.savedFilters.removeAll { $0.id == id }
         _ = commit(candidate)
     }
+    @discardableResult func commitVivaldi(_ candidate: LibraryData, checkpoint: Bool) -> Bool {
+        do {
+            try LibraryIntegrity.validate(candidate)
+            if checkpoint, FileManager.default.fileExists(atPath: storageURL.path) {
+                _ = try backups.checkpoint(Data(contentsOf: storageURL), label: "vivaldi-sync")
+                let history = try FileManager.default.contentsOfDirectory(at: backups.directory, includingPropertiesForKeys: [.contentModificationDateKey])
+                    .filter { $0.lastPathComponent.hasPrefix("vivaldi-sync-") }
+                    .sorted { ((try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) > ((try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast) }
+                for file in history.dropFirst(20) { try FileManager.default.removeItem(at: file) }
+            }
+            return commit(candidate)
+        } catch { self.error = "Sync could not save a recovery checkpoint: \(error.localizedDescription)"; return false }
+    }
     @discardableResult func backupNow() -> URL? {
         guard canSave else { error = "The unreadable library cannot be saved as a verified backup. Restore a valid backup instead."; return nil }
         do {

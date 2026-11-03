@@ -95,7 +95,9 @@ struct EntryInspector: View {
                 Picker("Collection", selection: $collectionID) {
                     Text("None").tag(nil as UUID?)
                     ForEach(store.data.collections) { Text(LibraryLogic.collectionPath($0, in: store.data.collections)).tag(Optional($0.id)) }
-                }.onChange(of: collectionID) { _, _ in if loaded { save() } }
+                }.onChange(of: collectionID) { _, value in
+                    if loaded, store.data.entries.first(where: { $0.id == entry.id })?.collectionID != value { save() }
+                }
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Tags").font(.caption).foregroundStyle(.secondary)
                     TextField("design, work, reading", text: $tags).textFieldStyle(.roundedBorder).onSubmit { save() }
@@ -131,8 +133,12 @@ struct EntryInspector: View {
                 Text("Display names and collections organize your library. Original files stay in place.").font(.caption).foregroundStyle(.tertiary)
             }.padding(22)
         }
-        .onChange(of: entry.tags) { _, value in tags = value.joined(separator: ", ") }
-        .onChange(of: entry.collectionID) { _, value in collectionID = value }
+        .onChange(of: entry.name) { old, value in if name == old { name = value } }
+        .onChange(of: entry.location) { old, value in if location == old { location = value } }
+        .onChange(of: entry.notes) { old, value in if notes == old { notes = value } }
+        .onChange(of: entry.favorite) { old, value in if favorite == old { favorite = value } }
+        .onChange(of: entry.tags) { old, value in if tags == old.joined(separator: ", ") { tags = value.joined(separator: ", ") } }
+        .onChange(of: entry.collectionID) { old, value in if collectionID == old { collectionID = value } }
         .onAppear {
             name = entry.name; notes = entry.notes; tags = entry.tags.joined(separator: ", ")
             location = entry.location; collectionID = entry.collectionID; favorite = entry.favorite; loaded = true

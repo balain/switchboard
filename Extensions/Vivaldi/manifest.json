@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Switchboard Vivaldi Bookmark Sync",
+  "version": "1.0.0",
+  "description": "Two-way local bookmark synchronization with Switchboard.",
+  "permissions": ["bookmarks", "storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": {"service_worker": "background.js", "type": "module"},
+  "options_page": "options.html",
+  "action": {"default_title": "Open Switchboard sync settings"}
+}

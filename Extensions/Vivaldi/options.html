@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Switchboard bookmark sync</title><link rel="stylesheet" href="options.css"></head>
+<body><main>
+<h1>Switchboard bookmark sync</h1>
+<p>Keep Switchboard and Vivaldi bookmarks in sync on this Mac. Titles, web addresses, and folders sync; notes, tags, and favorites stay in Switchboard. Both apps must be running.</p>
+<label>Pairing code from Switchboard <input id="pairing" type="password" autocomplete="off" placeholder="Paste pairing code"></label>
+<fieldset><legend>Bookmark scope</legend><label><input id="all" type="checkbox"> All bookmark folders</label>
+<p>Or select any combination of bookmarks and folders. Selecting a folder includes its descendants. Non-HTTP/HTTPS bookmarks are excluded.</p>
+<div id="tree" role="group" aria-label="Bookmarks and folders"></div></fieldset>
+<label>Destination for new items at the Switchboard sync root <select id="destination"><option value="">Existing selected items only</option></select></label>
+<p>Choose a folder inside the selected scope. With individual bookmarks only, existing items can sync but new root items require a selected destination folder. Move new Switchboard URLs or collections into <strong>Vivaldi Bookmarks</strong> to include them.</p>
+<div class="actions"><button id="connect">Save pairing and start</button><button id="pause">Pause</button><button id="sync">Sync now</button><button id="reconcile">Reconcile interrupted sync</button></div>
+<p id="status" role="status">Not paired.</p>
+<p>Concurrent edits pause for review in Switchboard. Changing scope requires New Pairing in Switchboard. Deletions propagate in both directions; moving a synced item outside its scope removes its counterpart. Browser recovery snapshots retain the last 20 changed batches.</p>
+<button id="backup">Download browser recovery snapshots</button>
+<button id="restore">Restore latest snapshot to a new folder</button>
+<p>Recovery snapshots contain bookmark titles and URLs. Keep them private. Disconnecting or pausing retains bookmarks in both apps.</p>
+</main><script type="module" src="options.js"></script></body></html>
