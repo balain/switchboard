@@ -103,15 +103,15 @@ final class LibraryWindowState: ObservableObject {
         showSmartCollections || !removeSelection.isEmpty
     }
 
-    func canRemoveSelection(in data: LibraryData, editingText: Bool = false, hasAttachedSheet: Bool = false) -> Bool {
-        guard !editingText, !hasAttachedSheet, !hasModalPresented else { return false }
+    func canRemoveSelection(in data: LibraryData, editingText: Bool = false, hasExternalModal: Bool = false) -> Bool {
+        guard !editingText, !hasExternalModal, !hasModalPresented else { return false }
         let validIDs = Set(data.entries.map(\.id))
         return !selection.intersection(validIDs).isEmpty
     }
 
     @discardableResult
-    func requestRemoveSelection(in data: LibraryData, editingText: Bool = false, hasAttachedSheet: Bool = false) -> Bool {
-        guard !editingText, !hasAttachedSheet, !hasModalPresented else { return false }
+    func requestRemoveSelection(in data: LibraryData, editingText: Bool = false, hasExternalModal: Bool = false) -> Bool {
+        guard !editingText, !hasExternalModal, !hasModalPresented else { return false }
         let valid = selection.intersection(Set(data.entries.map(\.id)))
         guard !valid.isEmpty else { return false }
         removeSelection = valid
@@ -233,12 +233,14 @@ struct LibraryCommands: Commands {
             Divider()
             Button("Remove from Library…") {
                 guard let window else { return }
-                let editing = NSApp?.keyWindow?.firstResponder is NSText
-                let sheet = NSApp?.keyWindow?.attachedSheet != nil
-                _ = window.requestRemoveSelection(in: store.data, editingText: editing, hasAttachedSheet: sheet)
+                let keyWindow = NSApp?.keyWindow
+                let mainWindow = NSApp?.mainWindow
+                let editing = keyWindow?.firstResponder is NSText
+                let modal = keyWindow?.sheetParent != nil || keyWindow?.attachedSheet != nil || mainWindow?.attachedSheet != nil || store.error != nil
+                _ = window.requestRemoveSelection(in: store.data, editingText: editing, hasExternalModal: modal)
             }
             .keyboardShortcut(.delete, modifiers: .command)
-            .disabled(window?.canRemoveSelection(in: store.data, editingText: responderState.editingText, hasAttachedSheet: responderState.hasAttachedSheet) != true)
+            .disabled(window?.canRemoveSelection(in: store.data, editingText: responderState.editingText, hasExternalModal: responderState.hasModalSheet || store.error != nil) != true)
         }
     }
 }
