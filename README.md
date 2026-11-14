@@ -51,7 +51,7 @@ The toolbar provides adding entries, choosing a display format, configuring the 
 
 **Filter** selects all entries, favorites, files, folders, URLs, or a specific collection. **Sort By** offers name, newest first, or kind. **Appearance** offers System, Light, or Dark.
 
-**File → Find and Remove Entries…** searches the entire library by text and type. Select individual results or all matches, including every entry of a type when the search is empty. Removal is undoable and warns when it can affect Vivaldi sync.
+**File → Find and Remove Entries…** combines text, type (files, folders, or URLs), date added, folder, and collection filters across the entire library. Date options include Before, On or After, and an inclusive Date Range, using local calendar days. Choose a folder to match stored paths inside it, optionally including subfolders; the chosen folder itself and URLs are excluded, and symbolic links are not followed. Choose a collection with optional subcollections, or Unfiled. All active filters must match. Select individual results or Select All Matching, then review the removal confirmation. Changing filters clears the selection. Removal supports Undo, preserves original files, and warns when it can affect Vivaldi sync.
 
 **File → Find Duplicates…** groups matching web addresses and stored file or folder paths without contacting websites or opening files. Select extra copies in bulk or choose which copy to keep in each group. The suggested survivor favors Vivaldi-synced entries, then entries with favorites, notes, or tags. Removed entries can be restored with Undo; their metadata is not merged. Removing a synced copy can also remove its Vivaldi bookmark on the next sync, after any required review.
 
