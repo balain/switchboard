@@ -100,11 +100,33 @@ final class LibraryWindowState: ObservableObject {
         selectedTags.formIntersection(Set(data.tags.map(\.id)))
         selection.formIntersection(Set(data.entries.map(\.id)))
     }
+
+    var hasModalPresented: Bool {
+        showHealth || showDuplicates || showEntryRemoval || showLibraryTransfer ||
+        showRules || showRulePreview || showTags || showQuickTags || showURL ||
+        showCollections || showSettings || showSmartCollections || !removeSelection.isEmpty
+    }
+
+    func canRemoveSelection(in data: LibraryData, editingText: Bool = false, hasExternalModal: Bool = false) -> Bool {
+        guard !editingText, !hasExternalModal, !hasModalPresented else { return false }
+        let validIDs = Set(data.entries.map(\.id))
+        return !selection.intersection(validIDs).isEmpty
+    }
+
+    @discardableResult
+    func requestRemoveSelection(in data: LibraryData, editingText: Bool = false, hasExternalModal: Bool = false) -> Bool {
+        guard !editingText, !hasExternalModal, !hasModalPresented else { return false }
+        let valid = selection.intersection(Set(data.entries.map(\.id)))
+        guard !valid.isEmpty else { return false }
+        removeSelection = valid
+        return true
+    }
 }
 
 struct LibraryCommands: Commands {
     @ObservedObject var store: LibraryStore
     @StateObject private var undoRouting = UndoRouting()
+    @StateObject private var responderState = CommandResponderState()
 
     @ObservedObject var launcher: QuickLauncherCoordinator
     @Environment(\.openWindow) private var openWindow
@@ -218,6 +240,17 @@ struct LibraryCommands: Commands {
                 window?.searchPresented = true
             }.keyboardShortcut("f").disabled(window == nil)
             Button("Clear Search") { window?.query = "" }.disabled(window?.query.isEmpty != false)
+            Divider()
+            Button("Remove from Library…") {
+                guard let window else { return }
+                let keyWindow = NSApp?.keyWindow
+                let mainWindow = NSApp?.mainWindow
+                let editing = keyWindow?.firstResponder is NSText
+                let modal = keyWindow?.sheetParent != nil || keyWindow?.attachedSheet != nil || mainWindow?.attachedSheet != nil || store.error != nil
+                _ = window.requestRemoveSelection(in: store.data, editingText: editing, hasExternalModal: modal)
+            }
+            .keyboardShortcut(.delete, modifiers: .command)
+            .disabled(window?.canRemoveSelection(in: store.data, editingText: responderState.editingText, hasExternalModal: responderState.hasModalSheet || store.error != nil) != true)
         }
     }
 }
