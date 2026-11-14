@@ -55,6 +55,8 @@ struct ViewSettings: View {
                 Text("System").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark")
             }.onChange(of: store.data.appearance) { _, _ in store.save() }
             Divider()
+            URLThumbnailSettings()
+            Divider()
             Button("Reset This View") { store.configuration = ViewConfiguration() }
         }.padding(22).frame(width: 340)
     }

@@ -129,11 +129,19 @@ For example, `kind:file ext:pdf tag:"To Read" quarterly results` restricts resul
 
 Opening **Add URL** checks the clipboard for a single web address. If present, the app fetches its HTML title and offers **Use Clipboard Details** to fill the URL and display name. Fields remain editable, and nothing is added until you select **Add URL**. You can dismiss the suggestion; when a title cannot be retrieved, **Use Clipboard URL** and manual naming remain available.
 
+## URL thumbnails
+
+In **View → Configure Current View…**, enable **Load thumbnails for URLs** under URL thumbnails. This shared setting defaults to off and applies to URL tiles in Thumbnails and Minimal Icon Bloom. Choose **1–12 concurrent loads** (default 4). Network fetches and image decoding run in parallel background tasks; duplicate URLs share a load across windows.
+
+The loader uses a page’s Open Graph or Twitter preview image, then declared site icons or `/favicon.ico`. It fetches HTML and images directly without executing scripts, using stored cookies or credentials, or contacting a thumbnail service. Enabling this setting allows visible URL tiles to contact their websites and referenced image hosts. Unsupported or unavailable images retain the standard URL icon. Disabling the setting cancels pending and active loads.
+
+Images are downsampled to at most 320 pixels and cached under `~/Library/Caches/Switchboard/URLThumbnails`. The disk cache survives relaunches, expires images after seven days, and evicts the oldest files above 100 MB. Memory holds up to 128 results; unsuccessful loads are retried after an hour when requested again. HTML is limited to 1 MB and individual images to 5 MB. **Clear URL Thumbnail Cache** clears cached images and reloads visible tiles if enabled. These preferences and cached images are local to this Mac and are not included in library exports.
+
 ## Saving and previews
 
 In the details panel, **Save Details** saves the display name, URL, tags, and notes. The display name, URL, and tags fields also save on Return; changing collection or favorite status saves the current details. Tags are comma-separated; whitespace and duplicates are removed, ignoring case.
 
-Hover over a thumbnail, card, list row, or table row for its name, location, kind, collection, tags, notes, and date added. File popups additionally show a short text excerpt or a Quick Look thumbnail when supported. Thumbnail display uses file previews with file-icon fallbacks; folders and URLs use icons.
+Hover over a thumbnail, card, list row, or table row for its name, location, kind, collection, tags, notes, and date added. File popups additionally show a short text excerpt or a Quick Look thumbnail when supported. Thumbnail display uses file previews with file-icon fallbacks; folders use icons, and URLs use icons unless URL thumbnails are enabled.
 
 Library entries, collections, tags, display format, sorting, appearance, and per-view configurations save locally in `~/Library/Application Support/Switchboard/library.json`. Active filters, search text, selection, panel visibility, Minimal mode, hierarchical display, and click behavior are restored using macOS preferences. Temporary dialogs do not reopen on launch. If the saved library cannot be read, the app reports the problem and disables saving to protect the existing file.
 
@@ -148,7 +156,7 @@ swift test --disable-sandbox --cache-path .build-cache
 node --test Tests/VivaldiExtensionTests/*.test.mjs
 ```
 
-Tests cover URL validation and HTML-title fetching, response-size limits, text-file previews, bookmarks, search and sorting, deduplication, persistence and unreadable-library protection, thumbnail sizing, restored view state, legacy settings, flat/hierarchical filtering, nesting cycle prevention, safe collection removal, tag migration and management, and combined any/all tag filtering. Additional suites cover smart collections, quick launcher search, bulk organization and Undo, library health, document content search, import/export and backups, organization rules, icon bloom, Vivaldi sync, duplicate review, bulk removal, large libraries, and feature integration. Companion extension tests cover sync reconciliation and worker behavior. Fetch tests use mocked responses rather than live websites.
+Tests cover URL validation and HTML-title fetching, response-size limits, text-file previews, bookmarks, search and sorting, deduplication, persistence and unreadable-library protection, thumbnail sizing, restored view state, legacy settings, flat/hierarchical filtering, nesting cycle prevention, safe collection removal, tag migration and management, and combined any/all tag filtering. Additional suites cover smart collections, quick launcher search, bulk organization and Undo, library health, document content search, import/export and backups, organization rules, icon bloom, URL thumbnails, Vivaldi sync, duplicate review, bulk removal, large libraries, and feature integration. Companion extension tests cover sync reconciliation and worker behavior. Fetch tests use mocked responses rather than live websites.
 
 The build script produces a locally ad-hoc-signed app; distribution to other Macs requires a Developer ID signing/notarization workflow. `.gitignore` covers common build outputs, machine-specific settings, signing files, and personal library exports.
 

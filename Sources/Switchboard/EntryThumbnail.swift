@@ -8,6 +8,9 @@ struct EntryThumbnail: View {
     var displaySize: CGFloat? = nil
     private var tileSize: CGFloat { displaySize ?? configuration.resolvedThumbnailSize }
     @Environment(\.displayScale) private var scale
+    @ObservedObject private var urlThumbnails = URLThumbnailStore.shared
+    private struct RequestID: Equatable { let entry: LibraryEntry; let revision: Int }
+    private var requestID: RequestID { RequestID(entry: entry, revision: urlThumbnails.revision) }
     @State private var image: CGImage?
     @State private var fileIcon: NSImage?
 
@@ -33,8 +36,16 @@ struct EntryThumbnail: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(entry.name)
-        .task(id: entry) {
+        .task(id: requestID) {
             image = nil; fileIcon = nil
+            if entry.kind == .url {
+                if urlThumbnails.enabled, let url = entry.url {
+                    let preview = await urlThumbnails.image(for: url)
+                    guard !Task.isCancelled else { return }
+                    image = preview
+                }
+                return
+            }
             guard let url = FilePreviewLoader.fileURL(for: entry) else { return }
             fileIcon = NSWorkspace.shared.icon(forFile: url.path)
             // Generate for the largest supported tile so resizing reuses the loaded image.
