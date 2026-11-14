@@ -66,6 +66,89 @@ final class UndoRouting: ObservableObject {
     }
 }
 
+@MainActor
+final class CommandResponderState: ObservableObject {
+    @Published private(set) var editingText = false
+    @Published private(set) var hasModalSheet = false
+    private var keyWindowObserver: NSKeyValueObservation?
+    private var mainWindowObserver: NSKeyValueObservation?
+    private var firstResponderObserver: NSKeyValueObservation?
+    private var sheetObserver: NSKeyValueObservation?
+    private var mainSheetObserver: NSKeyValueObservation?
+    private var subscriptions: [AnyCancellable] = []
+
+    init() {
+        guard let app = NSApp else { return }
+        keyWindowObserver = app.observe(\.keyWindow, options: [.initial, .new]) { [weak self] app, _ in
+            MainActor.assumeIsolated {
+                self?.bind(keyWindow: app.keyWindow, mainWindow: app.mainWindow)
+            }
+        }
+        mainWindowObserver = app.observe(\.mainWindow, options: [.initial, .new]) { [weak self] app, _ in
+            MainActor.assumeIsolated {
+                self?.bind(keyWindow: app.keyWindow, mainWindow: app.mainWindow)
+            }
+        }
+        let names: [Notification.Name] = [
+            NSWindow.didBecomeKeyNotification,
+            NSWindow.didResignKeyNotification,
+            NSWindow.willBeginSheetNotification,
+            NSWindow.didEndSheetNotification,
+            NSText.didBeginEditingNotification,
+            NSText.didEndEditingNotification,
+            NSText.didChangeNotification,
+            NSControl.textDidBeginEditingNotification,
+            NSControl.textDidEndEditingNotification
+        ]
+        for name in names {
+            NotificationCenter.default.publisher(for: name).sink { [weak self] _ in
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated {
+                        self?.bind(keyWindow: NSApp?.keyWindow, mainWindow: NSApp?.mainWindow)
+                    }
+                } else {
+                    Task { @MainActor [weak self] in
+                        self?.bind(keyWindow: NSApp?.keyWindow, mainWindow: NSApp?.mainWindow)
+                    }
+                }
+            }.store(in: &subscriptions)
+        }
+    }
+
+    func bind(keyWindow: NSWindow?, mainWindow: NSWindow?) {
+        firstResponderObserver = nil
+        sheetObserver = nil
+        mainSheetObserver = nil
+        update(keyWindow: keyWindow, mainWindow: mainWindow)
+        if let keyWindow {
+            firstResponderObserver = keyWindow.observe(\.firstResponder, options: [.new]) { [weak self, weak keyWindow, weak mainWindow] _, _ in
+                MainActor.assumeIsolated {
+                    self?.update(keyWindow: keyWindow, mainWindow: mainWindow)
+                }
+            }
+            sheetObserver = keyWindow.observe(\.attachedSheet, options: [.new]) { [weak self, weak keyWindow, weak mainWindow] _, _ in
+                MainActor.assumeIsolated {
+                    self?.update(keyWindow: keyWindow, mainWindow: mainWindow)
+                }
+            }
+        }
+        if let mainWindow, mainWindow !== keyWindow {
+            mainSheetObserver = mainWindow.observe(\.attachedSheet, options: [.new]) { [weak self, weak keyWindow, weak mainWindow] _, _ in
+                MainActor.assumeIsolated {
+                    self?.update(keyWindow: keyWindow, mainWindow: mainWindow)
+                }
+            }
+        }
+    }
+
+    func update(keyWindow: NSWindow?, mainWindow: NSWindow?) {
+        let nextEditing = keyWindow?.firstResponder is NSText
+        let nextModal = keyWindow?.sheetParent != nil || keyWindow?.attachedSheet != nil || mainWindow?.attachedSheet != nil
+        if editingText != nextEditing { editingText = nextEditing }
+        if hasModalSheet != nextModal { hasModalSheet = nextModal }
+    }
+}
+
 struct EntryClickInteraction: ViewModifier {
     let singleClick: Bool
     let select: (NSEvent.ModifierFlags) -> Void

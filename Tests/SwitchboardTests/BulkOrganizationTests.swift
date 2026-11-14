@@ -98,4 +98,74 @@ final class BulkOrganizationTests: XCTestCase {
         store.undoManager.undo(); XCTAssertTrue(store.data.entries.allSatisfy { !$0.favorite })
         store.undoManager.redo(); store.undoManager.redo(); XCTAssertTrue(store.data.entries.allSatisfy(\.favorite))
     }
+    @MainActor func testSelectionRemovalRequestsAndGuards() throws {
+        let (store, dir, a, b, _) = try fixture(); defer { try? FileManager.default.removeItem(at: dir) }
+        let c = try XCTUnwrap(store.addURL(name: "C", location: "c.example.com", collectionID: nil))
+        let suite = UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let window = LibraryWindowState(defaults: defaults)
+
+        XCTAssertFalse(window.canRemoveSelection(in: store.data))
+        XCTAssertFalse(window.requestRemoveSelection(in: store.data))
+        XCTAssertTrue(window.removeSelection.isEmpty)
+
+        let missing = UUID()
+        window.selection = [a, b, missing]
+        XCTAssertFalse(window.canRemoveSelection(in: store.data, editingText: true))
+        XCTAssertFalse(window.requestRemoveSelection(in: store.data, editingText: true))
+        XCTAssertFalse(window.canRemoveSelection(in: store.data, hasExternalModal: true))
+        XCTAssertFalse(window.requestRemoveSelection(in: store.data, hasExternalModal: true))
+
+        store.error = "Disk error"
+        XCTAssertFalse(window.canRemoveSelection(in: store.data, hasExternalModal: store.error != nil))
+        store.error = nil
+
+        window.showURL = true
+        XCTAssertFalse(window.canRemoveSelection(in: store.data))
+        XCTAssertFalse(window.requestRemoveSelection(in: store.data))
+        window.showURL = false
+
+        XCTAssertTrue(window.canRemoveSelection(in: store.data))
+        XCTAssertTrue(window.requestRemoveSelection(in: store.data))
+        XCTAssertEqual(window.removeSelection, [a, b])
+        XCTAssertFalse(window.canRemoveSelection(in: store.data))
+
+        XCTAssertEqual(store.remove(window.removeSelection), 2)
+        window.removeSelection = []
+        window.validate(in: store.data)
+        XCTAssertEqual(store.data.entries.map(\.id), [c])
+        XCTAssertTrue(window.selection.isEmpty)
+
+        store.undoManager.undo()
+        XCTAssertEqual(store.data.entries.count, 3)
+    }
+
+    @MainActor func testCommandResponderStateTracksTextFocusAndSheets() {
+        _ = NSApplication.shared
+        let parent = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 240, height: 160), styleMask: [.titled], backing: .buffered, defer: false)
+        let field = NSTextField(frame: NSRect(x: 10, y: 10, width: 180, height: 24))
+        parent.contentView?.addSubview(field)
+        let responder = CommandResponderState()
+
+        responder.bind(keyWindow: parent, mainWindow: parent)
+        XCTAssertFalse(responder.editingText)
+        XCTAssertFalse(responder.hasModalSheet)
+
+        parent.makeFirstResponder(field)
+        XCTAssertTrue(responder.editingText)
+
+        parent.makeFirstResponder(parent)
+        XCTAssertFalse(responder.editingText)
+
+        let sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 160, height: 120), styleMask: [.titled], backing: .buffered, defer: false)
+        parent.beginSheet(sheet)
+        defer { parent.endSheet(sheet) }
+
+        responder.bind(keyWindow: sheet, mainWindow: parent)
+        XCTAssertTrue(responder.hasModalSheet)
+
+        responder.bind(keyWindow: parent, mainWindow: parent)
+        XCTAssertTrue(responder.hasModalSheet)
+    }
 }
