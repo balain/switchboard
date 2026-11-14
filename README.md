@@ -44,11 +44,16 @@ The toolbar provides adding entries, choosing a display format, configuring the 
 
 | Menu | Commands |
 | --- | --- |
-| File | Quick Launcher…, Add Files and Folders… (Command-O), Add URL…, Manage Collections…, Manage Tags… |
-| View | Show/Hide Sidebar, Minimal, Minimal Icon Bloom, Show Details Panel, Display Format, Configure Current View…, Appearance, Filter, Collections, Smart Collections, Tags, Organize Selected, Sort By, Hierarchical Collections, Show Collection Names, Open Items With |
-| Edit | Search Library… (Command-F), Clear Search |
+| File | Vivaldi Bookmark Sync…, Library Health…, Find Duplicates…, Find and Remove Entries…, Import, Export, and Backups…, Quick Launcher…, Add Files and Folders… (Command-O), Add URL…, Manage Collections…, Manage Tags… |
+| View | Show/Hide Sidebar, Minimal, Minimal Icon Bloom, Show Details Panel, Display Format, Configure Current View…, Appearance, Filter, Search In, Collections, Smart Collections, Tags, Rules, Organize Selected, Sort By, Hierarchical Collections, Show Collection Names, Open Items With |
+| Edit | Undo (Command-Z), Redo (Command-Shift-Z), Search Library… (Command-F), Clear Search |
+| Switchboard | Quick Launcher Settings… (Command-,) |
 
 **Filter** selects all entries, favorites, files, folders, URLs, or a specific collection. **Sort By** offers name, newest first, or kind. **Appearance** offers System, Light, or Dark.
+
+**File → Find and Remove Entries…** searches the entire library by text and type. Select individual results or all matches, including every entry of a type when the search is empty. Removal is undoable and warns when it can affect Vivaldi sync.
+
+**File → Find Duplicates…** groups matching web addresses and stored file or folder paths without contacting websites or opening files. Select extra copies in bulk or choose which copy to keep in each group. The suggested survivor favors Vivaldi-synced entries, then entries with favorites, notes, or tags. Removed entries can be restored with Undo; their metadata is not merged. Removing a synced copy can also remove its Vivaldi bookmark on the next sync, after any required review.
 
 **Configure Current View** saves changes immediately. For cards, lists, and tables, Name remains visible while Kind, Location, Tags, Notes, and Date added can be hidden. Thumbnails hide these labels and instead offer a size slider in 8-point steps. Table column widths can be adjusted by dragging their header boundaries. **Reset This View** resets the current display's configuration.
 
@@ -98,7 +103,7 @@ The toolbar’s **Collections** dropdown and **View → Collections** let you se
 
 With **Hierarchical Collections** enabled, All Entries shows top-level collections as folders alongside unassigned entries. Opening a collection shows its direct entries and subcollections; **Back** returns to its parent. With hierarchical display disabled, All Entries shows every item, and selecting a collection shows its entries and all descendant collections' entries together. Collections can also be selected through the sidebar or **View → Filter**.
 
-An entry belongs to at most one collection. Its **Move to Collection** context menu omits the current collection and offers **Remove from Collection** when assigned. Deleting a collection keeps its entries in the library and moves its subcollections up to the deleted collection's parent.
+An entry belongs to at most one collection. Its **Move to Collection** context menu omits the current collection and offers **Remove from Collection** when assigned. When deleting a collection, choose **Delete Collection Only** to move its subcollections up to its parent, or **Delete With Subcollections** to remove the entire collection hierarchy. Both choices keep all entries in the library; entries from deleted collections become unassigned.
 
 ## Tags
 
@@ -128,9 +133,12 @@ Library entries, collections, tags, display format, sorting, appearance, and per
 CLANG_MODULE_CACHE_PATH="$PWD/.build-cache/clang" \
 SWIFT_MODULECACHE_PATH="$PWD/.build-cache/swift" \
 swift test --disable-sandbox --cache-path .build-cache
+
+# Companion extension tests (requires Node.js)
+node --test Tests/VivaldiExtensionTests/*.test.mjs
 ```
 
-Tests cover URL validation and HTML-title fetching, response-size limits, text-file previews, bookmarks, search and sorting, deduplication, persistence and unreadable-library protection, thumbnail sizing, restored view state, legacy settings, flat/hierarchical filtering, nesting cycle prevention, safe collection removal, tag migration and management, and combined any/all tag filtering. Fetch tests use mocked responses rather than live websites.
+Tests cover URL validation and HTML-title fetching, response-size limits, text-file previews, bookmarks, search and sorting, deduplication, persistence and unreadable-library protection, thumbnail sizing, restored view state, legacy settings, flat/hierarchical filtering, nesting cycle prevention, safe collection removal, tag migration and management, and combined any/all tag filtering. Additional suites cover smart collections, quick launcher search, bulk organization and Undo, library health, document content search, import/export and backups, organization rules, icon bloom, Vivaldi sync, duplicate review, bulk removal, large libraries, and feature integration. Companion extension tests cover sync reconciliation and worker behavior. Fetch tests use mocked responses rather than live websites.
 
 The build script produces a locally ad-hoc-signed app; distribution to other Macs requires a Developer ID signing/notarization workflow. `.gitignore` covers common build outputs, machine-specific settings, signing files, and personal library exports.
 
@@ -155,7 +163,7 @@ Re-running a failed workflow can replace assets on an existing mutable release; 
 
 ## Contributing
 
-Proposed feature work is documented in the [implementation plans](docs/plans/README.md), covering smart collections, a quick launcher, bulk organization, library health, content search, import/export/backups, organization rules, and Minimal-mode icon bloom.
+The eight implemented feature plans document scope and validation in the [implementation plans](docs/plans/README.md), covering smart collections, a quick launcher, bulk organization, library health, content search, import/export/backups, organization rules, and Minimal-mode icon bloom.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, implementation guidelines, validation, and pull request expectations.
 
