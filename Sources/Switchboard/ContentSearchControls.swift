@@ -47,3 +47,40 @@ struct ContentSearchStatus: View {
         }.font(.caption).padding(12)
     }
 }
+
+
+struct SearchScopeControls: View {
+    @Binding var mode: ContentSearchMode
+    @Binding var query: String
+    let scope: String
+    let tagCount: Int
+    let smart: Bool
+    @State private var showHelp = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Picker("Search In", selection: $mode) {
+                    ForEach(ContentSearchMode.allCases) { Text($0.title).tag($0) }
+                }.fixedSize()
+                Text("Within \(scope)" + (tagCount > 0 ? " · \(tagCount) tag filters" : ""))
+                    .lineLimit(1).help("Search combines with the current collection, saved conditions, and tag filters.")
+                Spacer()
+                if !query.isEmpty { Button("Clear Query") { query = "" } }
+                Button { showHelp.toggle() } label: { Image(systemName: "questionmark.circle") }
+                    .help("Search syntax").accessibilityLabel("Search syntax")
+                    .popover(isPresented: $showHelp) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Search syntax").font(.headline)
+                            Text("kind:file  tag:Reading  ext:pdf  favorite:true")
+                            Text("name:Report  location:Projects  notes:review")
+                            Text("Quote values containing spaces: tag:\"To Read\". Exclude a condition with a minus: -tag:Archive.")
+                            Text("Conditions all apply together. Remaining text is a phrase searched in the selected mode. Unknown prefixes are literal text.")
+                            Text("Document contents searches local text and PDFs. Metadata and contents matches either source. Saved conditions and tag filters still apply.")
+                        }.padding(18).frame(width: 380)
+                    }
+            }
+            if let error = SearchQuery(query).error { Text(error).foregroundStyle(.red) }
+            else if smart { Text("Saved conditions AND current query AND tag filters").foregroundStyle(.secondary) }
+        }.font(.caption).padding(.horizontal, 20).padding(.vertical, 8)
+    }
+}

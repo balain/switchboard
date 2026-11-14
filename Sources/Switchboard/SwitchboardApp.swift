@@ -51,6 +51,8 @@ struct ContentView: View {
     @State private var contentCacheVersion = 0
     @State private var filterDate = Date()
     @State private var selectionAnchor: UUID?
+    @FocusState private var cardsFocused: Bool
+    @State private var keyboardEntry: UUID?
     private var removeIDs: Set<UUID> {
         get { window.removeSelection }
         nonmutating set { window.removeSelection = newValue }
@@ -69,16 +71,18 @@ struct ContentView: View {
     }
     var hasAdditionalFilters: Bool { !window.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !window.selectedTags.isEmpty }
     var searching: Bool { smartCollection != nil || hasAdditionalFilters }
-    var contentQueryActive: Bool { !window.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && contentMode != .metadata }
+    var parsedQuery: SearchQuery { SearchQuery(window.query) }
+    var contentQueryActive: Bool { parsedQuery.error == nil && !parsedQuery.text.isEmpty && contentMode != .metadata }
     var contentCandidates: [LibraryEntry] {
-        LibraryLogic.scopedEntries(smartCollection.map { saved in store.data.entries.filter { saved.criteria.matches($0, in: store.data, now: filterDate) } } ?? store.data.entries,
+        let parsed = parsedQuery
+        return LibraryLogic.scopedEntries(smartCollection.map { saved in store.data.entries.filter { saved.criteria.matches($0, in: store.data, now: filterDate) } } ?? store.data.entries,
                                    collections: store.data.collections, scope: window.scope,
                                    hierarchical: smartCollection == nil && hierarchical && !contentQueryActive,
                                    query: contentQueryActive ? "" : window.query, sort: store.data.sort,
-                                   tags: selectedTagNames, tagMatch: window.tagMatch)
+                                   tags: selectedTagNames, tagMatch: window.tagMatch).filter { parsed.matchesFields($0) }
     }
     var contentRequest: ContentSearchRequest {
-        ContentSearchRequest(entries: contentCandidates, libraryIDs: Set(store.data.entries.map(\.id)), query: window.query.trimmingCharacters(in: .whitespacesAndNewlines), mode: contentMode, cacheVersion: contentCacheVersion)
+        ContentSearchRequest(entries: contentCandidates, libraryIDs: Set(store.data.entries.map(\.id)), query: parsedQuery.text, mode: contentMode, cacheVersion: contentCacheVersion)
     }
     func contentMatch(for entry: LibraryEntry) -> ContentMatch? {
         guard contentQueryActive, contentSearch.request == contentRequest else { return nil }
@@ -89,7 +93,7 @@ struct ContentView: View {
         let candidates = contentCandidates
         let matches = contentSearch.request == contentRequest ? contentSearch.matches : [:]
         return candidates.filter { entry in
-            matches[entry.id]?.state == .matched || (contentMode == .both && LibraryLogic.matches(entry, query: window.query))
+            matches[entry.id]?.state == .matched || (contentMode == .both && parsedQuery.matchesMetadata(entry))
         }
     }
     var searchMatches: [LibraryEntry] { entries }
@@ -135,6 +139,7 @@ struct ContentView: View {
         .sheet(isPresented: $window.showRulePreview) { RulePreviewPanel(store: store, ids: window.rulePreviewIDs) }
         .sheet(isPresented: $window.showURL) { AddURLSheet(store: store, collectionID: collectionID) { window.selection = [$0] } }
         .sheet(isPresented: $window.showCollections) { CollectionManager(store: store) }
+        .sheet(isPresented: $window.showQuickTags) { QuickTagEditor(store: store, ids: window.quickTagIDs) }
         .sheet(isPresented: $window.showTags) { TagManager(store: store) }
         .sheet(isPresented: $window.showSettings) {
             VStack {
@@ -174,6 +179,7 @@ struct ContentView: View {
                         sidebarRow(LibraryLogic.collectionPath(collection, in: store.data.collections), icon: collection.symbol,
                                    value: collection.id.uuidString, count: snapshot.collectionCounts[collection.id, default: 0])
                             .onTapGesture { window.scope = collection.id.uuidString }
+                            .modifier(EntryDropTarget(store: store, action: .collection(collection.id)))
                             .listRowBackground(collection.palette?.color.opacity(0.18))
                     }
                     Button { window.showCollections = true } label: { Label("Manage collections…", systemImage: "folder.badge.gearshape") }
@@ -199,6 +205,7 @@ struct ContentView: View {
                             }
                         }.toggleStyle(.checkbox)
                             .listRowBackground(tag.palette?.color.opacity(0.18))
+                            .modifier(EntryDropTarget(store: store, action: .addTag(tag.id)))
                     }
                     if !window.selectedTags.isEmpty {
                         Picker("Match", selection: $window.tagMatch) {
@@ -248,6 +255,10 @@ struct ContentView: View {
                         Button("Edit…") { window.smartDraft = smartCollection; window.showSmartCollections = true }
                         if hasAdditionalFilters { Button("Clear Additional Filters") { window.query = ""; window.selectedTags = [] } }
                     }.font(.caption).padding(12)
+                }
+                if !minimalView || hasAdditionalFilters {
+                    SearchScopeControls(mode: $contentMode, query: $window.query, scope: title, tagCount: window.selectedTags.count, smart: smartCollection != nil)
+                    Divider()
                 }
                 if contentQueryActive {
                     ContentSearchStatus(model: contentSearch, request: contentRequest, refresh: { contentCacheVersion += 1 }, clear: {
@@ -340,6 +351,8 @@ struct ContentView: View {
                     Menu { CollectionFilterMenu(store: store, window: window) } label: { Label("Collections", systemImage: "folder") }
                         .help("Select or manage collections")
                     Menu { TagFilterMenu(store: store, window: window) } label: { Label("Filter by tags", systemImage: "tag") }
+                    Button { window.quickTagIDs = window.selection; window.showQuickTags = true } label: { Label("Edit selection tags", systemImage: "tag.circle") }
+                        .disabled(window.selection.isEmpty).help("Edit tags for selection (Command-Shift-T)")
                     Menu("Organize Selected", systemImage: "square.stack.3d.up") {
                         BulkActions(store: store, ids: window.selection) { removeIDs = $0 }
                     }.disabled(window.selection.isEmpty).help("Organize selected entries")
@@ -379,6 +392,7 @@ struct ContentView: View {
                                     .padding(12)
                                     .background(collection.palette?.color.opacity(0.22) ?? Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
                             }.buttonStyle(.plain)
+                            .modifier(EntryDropTarget(store: store, action: .collection(collection.id)))
                         }
                     }
                 }
@@ -388,11 +402,15 @@ struct ContentView: View {
     func sidebarRow(_ name: String, icon: String, value: String, count: Int) -> some View {
         HStack { Label(name, systemImage: icon); Spacer(); Text("\(count)").font(.caption).foregroundStyle(.tertiary) }.tag(value)
     }
+    func dragPayload(for entry: LibraryEntry) -> EntryDrag {
+        EntryDrag(ids: window.selection.contains(entry.id) ? window.selection : [entry.id])
+    }
     var cards: some View {
         let thumbnails = store.data.view == .thumbnails
         let width = thumbnails ? store.configuration.resolvedThumbnailSize : store.data.view.cardWidth
         let spacing: CGFloat = thumbnails ? 8 : 16
-        return ScrollView {
+        return ScrollViewReader { proxy in
+          ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: width, maximum: thumbnails ? width : .infinity), spacing: spacing)],
                       alignment: .leading, spacing: spacing) {
                 ForEach(entries) { entry in
@@ -400,11 +418,29 @@ struct ContentView: View {
                         if thumbnails {
                             EntryThumbnail(entry: entry, configuration: store.configuration, selected: window.selection.contains(entry.id))
                         } else {
-                            EntryTile(entry: entry, configuration: store.configuration, view: store.data.view, selected: window.selection.contains(entry.id), contentMatch: contentMatch(for: entry), query: window.query)
+                            EntryTile(entry: entry, configuration: store.configuration, view: store.data.view, selected: window.selection.contains(entry.id), contentMatch: contentMatch(for: entry), query: parsedQuery.text)
                         }
                     }
                 }
             }.padding(thumbnails ? 12 : 24)
+          }
+          .focusable().focused($cardsFocused)
+          .onKeyPress(keys: [.leftArrow, .rightArrow, .upArrow, .downArrow]) { press in
+              guard !entries.isEmpty, press.modifiers.intersection([.command, .option, .control]).isEmpty else { return .ignored }
+              let current = entries.firstIndex { $0.id == keyboardEntry } ?? entries.firstIndex { window.selection.contains($0.id) }
+              let delta = press.key == .leftArrow || press.key == .upArrow ? -1 : 1
+              let index = current.map { min(entries.count - 1, max(0, $0 + delta)) } ?? (delta > 0 ? 0 : entries.count - 1)
+              let id = entries[index].id
+              if press.modifiers.contains(.shift), selectionAnchor == nil { selectionAnchor = current.map { entries[$0].id } ?? id }
+              select(id, modifiers: press.modifiers.contains(.shift) ? [.shift] : [])
+              keyboardEntry = id; proxy.scrollTo(id)
+              return .handled
+          }
+          .onKeyPress(.return, phases: .down) { _ in
+              for entry in entries where window.selection.contains(entry.id) { store.open(entry) }
+              return .handled
+          }
+          .onKeyPress(.escape) { window.selection = []; selectionAnchor = nil; keyboardEntry = nil; return .handled }
         }
     }
     var minimalIcons: some View {
@@ -421,6 +457,8 @@ struct ContentView: View {
             .contentShape(Rectangle())
             .entryHoverInfo(entry, collection: collectionName(for: entry), excerpt: contentMatch(for: entry)?.snippet)
             .modifier(EntryClickInteraction(singleClick: singleClick, select: { select(entry.id, modifiers: $0) }, open: { store.open(entry) }))
+            .draggable(dragPayload(for: entry))
+            .id(entry.id)
             .contextMenu { entryMenu(entry) }
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(.isButton)
@@ -435,7 +473,7 @@ struct ContentView: View {
                     EntryIcon(kind: entry.kind, color: store.configuration.palette.color, size: store.data.view == .compactList ? 30 : 44)
                     VStack(alignment: .leading, spacing: 5) {
                         HStack { Text(entry.name).fontWeight(.medium).lineLimit(1); if entry.favorite { Image(systemName: "star.fill").foregroundStyle(.orange).font(.caption) } }
-                        EntryDetails(entry: entry, configuration: store.configuration, contentMatch: contentMatch(for: entry), query: window.query)
+                        EntryDetails(entry: entry, configuration: store.configuration, contentMatch: contentMatch(for: entry), query: parsedQuery.text)
                     }
                     Spacer(minLength: 0)
                     if !singleClick {
@@ -448,6 +486,7 @@ struct ContentView: View {
                 .contentShape(Rectangle())
                 .entryHoverInfo(entry, collection: collectionName(for: entry), excerpt: contentMatch(for: entry)?.snippet)
                 .tag(entry.id)
+                .draggable(dragPayload(for: entry))
                 .modifier(EntryOpenInteraction(singleClick: singleClick, open: { select(entry.id, modifiers: []); store.open(entry) }))
             }
         }.listStyle(.inset)
@@ -466,6 +505,7 @@ struct ContentView: View {
     func tableCell<Content: View>(_ entry: LibraryEntry, @ViewBuilder content: () -> Content) -> some View {
         content()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .draggable(dragPayload(for: entry))
             .contentShape(Rectangle())
             .entryHoverInfo(entry, collection: collectionName(for: entry), excerpt: contentMatch(for: entry)?.snippet)
             .modifier(EntryOpenInteraction(singleClick: singleClick, open: { select(entry.id, modifiers: []); store.open(entry) }))
@@ -479,7 +519,7 @@ struct ContentView: View {
             }.width(min: 150, ideal: 220)
             if contentQueryActive {
                 TableColumn("Content match") { entry in
-                    tableCell(entry) { ContentSnippet(text: contentMatch(for: entry)?.snippet ?? "", query: window.query) }
+                    tableCell(entry) { ContentSnippet(text: contentMatch(for: entry)?.snippet ?? "", query: parsedQuery.text) }
                 }.width(min: 180, ideal: 260)
             }
             if store.configuration.fields.contains(.kind) {
@@ -510,6 +550,8 @@ struct ContentView: View {
         }
     }
     func select(_ id: UUID, modifiers: NSEvent.ModifierFlags = NSEvent.modifierFlags) {
+        keyboardEntry = id
+        if store.data.view != .table && store.data.view != .compactList && store.data.view != .comfortableList && !(minimalView && minimalIconBloom) { cardsFocused = true }
         if modifiers.contains(.command) {
             if window.selection.contains(id) { window.selection.remove(id) } else { window.selection.insert(id) }; selectionAnchor = id
         } else if modifiers.contains(.shift),
@@ -519,6 +561,10 @@ struct ContentView: View {
         } else { window.selection = [id]; selectionAnchor = id }
     }
     @ViewBuilder func entryMenu(_ entry: LibraryEntry) -> some View {
+        Button("Edit Tags…") {
+            window.quickTagIDs = window.selection.contains(entry.id) ? window.selection : [entry.id]
+            window.showQuickTags = true
+        }
         if window.selection.contains(entry.id), window.selection.count > 1 {
             BulkActions(store: store, ids: window.selection) { removeIDs = $0 }
         } else { singleEntryMenu(entry) }

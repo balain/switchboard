@@ -48,6 +48,8 @@ final class LibraryWindowState: ObservableObject {
     @Published var showRulePreview = false
     @Published var rulePreviewIDs: Set<UUID>?
     @Published var showTags = false
+    @Published var quickTagIDs: Set<UUID> = []
+    @Published var showQuickTags = false
     @Published var showURL = false
     @Published var showCollections = false
     @Published var showSettings = false
@@ -188,6 +190,9 @@ struct LibraryCommands: Commands {
                 Button("Preview Rules for Selected…") { window?.rulePreviewIDs = window?.selection; window?.showRulePreview = true }.disabled(window?.selection.isEmpty != false)
                 Button("Preview Rules for All Entries…") { window?.rulePreviewIDs = nil; window?.showRulePreview = true }
             }.disabled(window == nil)
+            Button("Edit Tags for Selection…") {
+                window?.quickTagIDs = window?.selection ?? []; window?.showQuickTags = true
+            }.keyboardShortcut("t", modifiers: [.command, .shift]).disabled(window?.selection.isEmpty != false)
             Menu("Organize Selected") {
                 if let window {
                     BulkActions(store: store, ids: window.selection) { window.removeSelection = $0 }

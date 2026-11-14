@@ -45,7 +45,7 @@ The toolbar provides adding entries, choosing a display format, configuring the 
 | Menu | Commands |
 | --- | --- |
 | File | Vivaldi Bookmark Sync…, Library Health…, Find Duplicates…, Find and Remove Entries…, Import, Export, and Backups…, Quick Launcher…, Add Files and Folders… (Command-O), Add URL…, Manage Collections…, Manage Tags… |
-| View | Show/Hide Sidebar, Minimal, Minimal Icon Bloom, Show Details Panel, Display Format, Configure Current View…, Appearance, Filter, Search In, Collections, Smart Collections, Tags, Rules, Organize Selected, Sort By, Hierarchical Collections, Show Collection Names, Open Items With |
+| View | Show/Hide Sidebar, Minimal, Minimal Icon Bloom, Show Details Panel, Display Format, Configure Current View…, Appearance, Filter, Search In, Collections, Smart Collections, Tags, Rules, Edit Tags for Selection…, Organize Selected, Sort By, Hierarchical Collections, Show Collection Names, Open Items With |
 | Edit | Undo (Command-Z), Redo (Command-Shift-Z), Search Library… (Command-F), Clear Search |
 | Switchboard | Quick Launcher Settings… (Command-,) |
 
@@ -68,6 +68,12 @@ Use View → Smart Collections or the toolbar to save the current filters, selec
 ## Bulk organization and Undo
 
 Select multiple entries and use View → Organize Selected, the toolbar, the details panel, or the selection context menu. Add/remove individual tags, set/clear a collection, change favorites, or remove library entries. Actions preserve unrelated tags and fields and use one grouped Undo/Redo operation. All windows share the library history; text editors retain their native editing history. Conflicting history is reported and cleared after the Undo/Redo operation completes. Writes are staged and published only on success, with a one-time `library.json.before-bulk-organization` checkpoint. Original files remain untouched.
+
+Drag an entry, or a selected group, onto a sidebar collection or a collection navigation button to move it. Drop onto a sidebar tag to add that tag without replacing other tags. These actions support Undo and leave original files untouched. Moving Vivaldi-synced entries can affect the next bookmark sync.
+
+Use **View → Edit Tags for Selection…** (Command-Shift-T), the toolbar tag-edit button, or **Edit Tags…** in an entry’s context menu for searchable tag checkboxes. Mixed tags can be added to all selected entries or removed from all; changes save immediately and support Undo.
+
+Cards and thumbnails support arrow-key navigation in display order, Shift-arrow range selection, Return to open selected entries, and Escape to clear selection. Navigation scrolls the selected entry into view; list and table views retain native keyboard navigation.
 
 ## Quick launcher
 
@@ -116,6 +122,10 @@ In the details panel, use **Choose Tags** to assign existing tags, or type comma
 ## Search and URL entry
 
 Search filters names, locations, tags, and notes as you type within the active filter or collection. Searching a collection also includes its descendants, even in hierarchical mode. The dropdown shows up to 12 matching items; selecting one opens it directly. **Command-F** focuses search and leaves Minimal mode if necessary to reveal the search field. **Clear Search** removes the query.
+
+Search supports `kind:file`, `kind:folder`, `kind:url`, `tag:Reading`, `ext:pdf`, `favorite:true`, `favorite:false`, `name:Report`, `location:Projects`, and `notes:review`. Quote values containing spaces, such as `tag:"To Read"`, and prefix a condition with `-` to exclude it (`-tag:Archive`). Tags match complete names; name, location, and notes match substrings, ignoring case. All field conditions must match. Remaining text is a phrase searched in the selected mode; unknown prefixes remain literal text. Invalid conditions show guidance and return no matches.
+
+For example, `kind:file ext:pdf tag:"To Read" quarterly results` restricts results to tagged PDFs and searches for “quarterly results.” In Document Contents mode the phrase must occur in extracted text; Metadata and Contents accepts either source. Field conditions, active collections, saved smart conditions, and sidebar tag filters always apply. A query containing only field conditions works in every search mode without extracting document text. The search scope bar shows the current mode and scope, provides syntax help, and can clear the query while retaining other filters. The quick launcher retains its plain-text ranked search.
 
 Opening **Add URL** checks the clipboard for a single web address. If present, the app fetches its HTML title and offers **Use Clipboard Details** to fill the URL and display name. Fields remain editable, and nothing is added until you select **Add URL**. You can dismiss the suggestion; when a title cannot be retrieved, **Use Clipboard URL** and manual naming remain available.
 

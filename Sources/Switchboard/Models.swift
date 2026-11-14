@@ -190,17 +190,15 @@ enum LibraryLogic {
         return url
     }
     static func matches(_ entry: LibraryEntry, query: String) -> Bool {
-        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return query.isEmpty || searchableText(entry)
-            .contains { $0.localizedCaseInsensitiveContains(query) }
+        SearchQuery(query).matchesMetadata(entry)
     }
     static func searchableText(_ entry: LibraryEntry) -> [String] {
         [entry.name, entry.location, entry.notes, entry.tags.joined(separator: " ")]
     }
     static func filtered(_ entries: [LibraryEntry], query: String, sort: EntrySort) -> [LibraryEntry] {
-        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parsed = SearchQuery(query)
         return entries.filter {
-            matches($0, query: query)
+            parsed.matchesMetadata($0)
         }.sorted {
             switch sort {
             case .newest: return $0.added > $1.added
