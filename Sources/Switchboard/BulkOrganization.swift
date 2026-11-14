@@ -66,6 +66,46 @@ final class UndoRouting: ObservableObject {
     }
 }
 
+@MainActor
+final class CommandResponderState: ObservableObject {
+    @Published private(set) var editingText = false
+    @Published private(set) var hasAttachedSheet = false
+    private var keyWindowObserver: NSKeyValueObservation?
+    private var firstResponderObserver: NSKeyValueObservation?
+    private var sheetObserver: NSKeyValueObservation?
+
+    init() {
+        guard let app = NSApp else { return }
+        keyWindowObserver = app.observe(\.keyWindow, options: [.initial, .new]) { [weak self] app, _ in
+            MainActor.assumeIsolated {
+                self?.bind(to: app.keyWindow)
+            }
+        }
+    }
+
+    private func bind(to window: NSWindow?) {
+        firstResponderObserver = nil
+        sheetObserver = nil
+        update(from: window)
+        guard let window else { return }
+        firstResponderObserver = window.observe(\.firstResponder, options: [.new]) { [weak self, weak window] _, _ in
+            MainActor.assumeIsolated {
+                self?.update(from: window)
+            }
+        }
+        sheetObserver = window.observe(\.attachedSheet, options: [.new]) { [weak self, weak window] _, _ in
+            MainActor.assumeIsolated {
+                self?.update(from: window)
+            }
+        }
+    }
+
+    private func update(from window: NSWindow?) {
+        editingText = window?.firstResponder is NSText
+        hasAttachedSheet = window?.attachedSheet != nil
+    }
+}
+
 struct EntryClickInteraction: ViewModifier {
     let singleClick: Bool
     let select: (NSEvent.ModifierFlags) -> Void

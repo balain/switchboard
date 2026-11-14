@@ -46,7 +46,7 @@ The toolbar provides adding entries, choosing a display format, configuring the 
 | --- | --- |
 | File | Quick Launcher…, Add Files and Folders… (Command-O), Add URL…, Manage Collections…, Manage Tags… |
 | View | Show/Hide Sidebar, Minimal, Minimal Icon Bloom, Show Details Panel, Display Format, Configure Current View…, Appearance, Filter, Collections, Smart Collections, Tags, Organize Selected, Sort By, Hierarchical Collections, Show Collection Names, Open Items With |
-| Edit | Search Library… (Command-F), Clear Search |
+| Edit | Search Library… (Command-F), Clear Search, Remove from Library… (Command-Delete) |
 
 **Filter** selects all entries, favorites, files, folders, URLs, or a specific collection. **Sort By** offers name, newest first, or kind. **Appearance** offers System, Light, or Dark.
 
@@ -54,7 +54,7 @@ The toolbar provides adding entries, choosing a display format, configuring the 
 
 **View → Minimal Icon Bloom** is enabled by default. In Minimal mode, it presents a horizontally scrollable icon strip with Dock-style magnification around the pointer. Neighboring icons move apart as they grow. Icons adapt to short windows, and Reduce Motion uses a static hover outline instead. Use arrow keys to select and reveal entries and Return to open the selected entry. Selection, context menus, and single/double-click settings remain available. Turning bloom off restores the previous Minimal layout; leaving Minimal restores the saved normal display format. Hovering never opens an entry or changes library data.
 
-Single-click or double-click opening applies to entries in every display format. Command-click supports card/thumbnail multiselection; Command-click and Shift-click do not open entries. Right-click an item for opening, revealing in Finder, copying its location, changing favorite status, moving between collections, or removing it from the library. Hover panels dismiss when you click, scroll, type, or open a menu.
+Single-click or double-click opening applies to entries in every display format. Command-click supports card/thumbnail multiselection; Command-click and Shift-click do not open entries. Right-click an item for opening, revealing in Finder, copying its location, changing favorite status, moving between collections, or removing it from the library. Press **Command-Delete** (or choose **Edit → Remove from Library…**) to remove one or more selected entries after confirmation. Hover panels dismiss when you click, scroll, type, or open a menu.
 
 ## Smart collections
 
@@ -62,7 +62,7 @@ Use View → Smart Collections or the toolbar to save the current filters, selec
 
 ## Bulk organization and Undo
 
-Select multiple entries and use View → Organize Selected, the toolbar, the details panel, or the selection context menu. Add/remove individual tags, set/clear a collection, change favorites, or remove library entries. Actions preserve unrelated tags and fields and use one grouped Undo/Redo operation. All windows share the library history; text editors retain their native editing history. Conflicting history is reported and cleared after the Undo/Redo operation completes. Writes are staged and published only on success, with a one-time `library.json.before-bulk-organization` checkpoint. Original files remain untouched.
+Select multiple entries and use View → Organize Selected, the toolbar, the details panel, the selection context menu, or **Command-Delete** (**Edit → Remove from Library…**). Add/remove individual tags, set/clear a collection, change favorites, or remove library entries. Actions preserve unrelated tags and fields and use one grouped Undo/Redo operation. All windows share the library history; text editors retain their native editing history. Conflicting history is reported and cleared after the Undo/Redo operation completes. Writes are staged and published only on success, with a one-time `library.json.before-bulk-organization` checkpoint. Original files remain untouched.
 
 ## Quick launcher
 

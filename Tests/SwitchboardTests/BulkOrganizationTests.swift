@@ -98,4 +98,42 @@ final class BulkOrganizationTests: XCTestCase {
         store.undoManager.undo(); XCTAssertTrue(store.data.entries.allSatisfy { !$0.favorite })
         store.undoManager.redo(); store.undoManager.redo(); XCTAssertTrue(store.data.entries.allSatisfy(\.favorite))
     }
+    @MainActor func testSelectionRemovalRequestsAndGuards() throws {
+        let (store, dir, a, b, _) = try fixture(); defer { try? FileManager.default.removeItem(at: dir) }
+        let c = try XCTUnwrap(store.addURL(name: "C", location: "c.example.com", collectionID: nil))
+        let suite = UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let window = LibraryWindowState(defaults: defaults)
+
+        XCTAssertFalse(window.canRemoveSelection(in: store.data))
+        XCTAssertFalse(window.requestRemoveSelection(in: store.data))
+        XCTAssertTrue(window.removeSelection.isEmpty)
+
+        let missing = UUID()
+        window.selection = [a, b, missing]
+        XCTAssertFalse(window.canRemoveSelection(in: store.data, editingText: true))
+        XCTAssertFalse(window.requestRemoveSelection(in: store.data, editingText: true))
+        XCTAssertFalse(window.canRemoveSelection(in: store.data, hasAttachedSheet: true))
+        XCTAssertFalse(window.requestRemoveSelection(in: store.data, hasAttachedSheet: true))
+
+        window.showURL = true
+        XCTAssertFalse(window.canRemoveSelection(in: store.data))
+        XCTAssertFalse(window.requestRemoveSelection(in: store.data))
+        window.showURL = false
+
+        XCTAssertTrue(window.canRemoveSelection(in: store.data))
+        XCTAssertTrue(window.requestRemoveSelection(in: store.data))
+        XCTAssertEqual(window.removeSelection, [a, b])
+        XCTAssertFalse(window.canRemoveSelection(in: store.data))
+
+        XCTAssertEqual(store.remove(window.removeSelection), 2)
+        window.removeSelection = []
+        window.validate(in: store.data)
+        XCTAssertEqual(store.data.entries.map(\.id), [c])
+        XCTAssertTrue(window.selection.isEmpty)
+
+        store.undoManager.undo()
+        XCTAssertEqual(store.data.entries.count, 3)
+    }
 }

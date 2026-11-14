@@ -139,7 +139,11 @@ struct ContentView: View {
         .alert("Remove from library?", isPresented: Binding(get: { !removeIDs.isEmpty }, set: { if !$0 { removeIDs = [] } })) {
             Button("Cancel", role: .cancel) { removeIDs = [] }
             Button("Remove", role: .destructive) { if store.remove(removeIDs) > 0 { window.validate(in: store.data) }; removeIDs = [] }
-        } message: { Text("Original files and folders will remain on disk.") }
+        } message: {
+            Text(removeIDs.count > 1
+                 ? "Remove \(removeIDs.count) selected entries? Original files and folders will remain on disk."
+                 : "Original files and folders will remain on disk.")
+        }
         .alert("Switchboard", isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
             Button("OK") { store.error = nil }
         } message: { Text(store.error ?? "") }
