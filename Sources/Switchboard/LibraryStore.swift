@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 final class LibraryStore: ObservableObject {
     @Published var data = LibraryData()
     @Published var error: String?
+    @Published var missingEntry: LibraryEntry?
     var importRuleProcessor: ((inout LibraryData, Set<UUID>) -> Void)?
     var importRulesAvailable: Bool { importRuleProcessor != nil }
     @Published var lastRuleSummary = ""
@@ -14,6 +15,9 @@ final class LibraryStore: ObservableObject {
     let undoManager = UndoManager()
     private let storageURL: URL
     let backups: LibraryBackups
+    private let localCheck: (LibraryEntry) -> HealthCheck
+    private let workspaceOpener: (URL, @escaping @Sendable (Error?) -> Void) -> Void
+    private let finderRevealer: (URL) -> Void
     private let writer: (Data, URL) throws -> Void
     private var lastPersisted = LibraryData()
     private var canSave = true
@@ -23,10 +27,25 @@ final class LibraryStore: ObservableObject {
     convenience init(storageURL: URL? = nil, writer: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) {
         self.init(storageURL: storageURL, backupDirectory: nil, clock: Date.init, writer: writer)
     }
-    init(storageURL: URL? = nil, backupDirectory: URL?, clock: @escaping () -> Date = Date.init, writer: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }) {
+    init(
+        storageURL: URL? = nil,
+        backupDirectory: URL?,
+        clock: @escaping () -> Date = Date.init,
+        localCheck: @escaping (LibraryEntry) -> HealthCheck = LocalHealthProbe.check,
+        workspaceOpener: @escaping (URL, @escaping @Sendable (Error?) -> Void) -> Void = { url, completion in
+            NSWorkspace.shared.open(url, configuration: .init()) { _, error in completion(error) }
+        },
+        finderRevealer: @escaping (URL) -> Void = { url in
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        },
+        writer: @escaping (Data, URL) throws -> Void = { try $0.write(to: $1, options: .atomic) }
+    ) {
         self.storageURL = storageURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Switchboard/library.json")
         self.backups = LibraryBackups(directory: backupDirectory ?? self.storageURL.deletingLastPathComponent().appendingPathComponent("Backups"), clock: clock)
+        self.localCheck = localCheck
+        self.workspaceOpener = workspaceOpener
+        self.finderRevealer = finderRevealer
         self.writer = writer
         self.importRuleProcessor = { candidate, ids in
             let preview = RuleEngine.preview(entries: candidate.entries.filter { ids.contains($0.id) }, data: candidate, event: .importedEntries)
@@ -79,6 +98,7 @@ final class LibraryStore: ObservableObject {
         for index in candidate.rules.indices where candidate.rules[index].unavailable(in: candidate) { candidate.rules[index].enabled = false }
         guard persist(candidate) else { return false }
         data = candidate
+        if let missing = missingEntry, !candidate.entries.contains(where: { $0.id == missing.id }) { missingEntry = nil }
         return true
     }
     @discardableResult
@@ -166,7 +186,7 @@ final class LibraryStore: ObservableObject {
                 try FileManager.default.createDirectory(at: storageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try writer(encoded, storageURL)
             } catch { canSave = previous; throw error }
-            lastPersisted = restored; data = restored; self.error = nil; lastRuleSummary = ""
+            lastPersisted = restored; data = restored; self.error = nil; self.missingEntry = nil; lastRuleSummary = ""
             undoManager.removeAllActions(); NotificationCenter.default.post(name: .libraryReplaced, object: self)
             return true
         } catch { self.error = "Restore failed: \(error.localizedDescription)"; return false }
@@ -391,7 +411,8 @@ final class LibraryStore: ObservableObject {
     func resolve(_ entry: LibraryEntry) -> URL? {
         if let bookmark = entry.bookmark {
             var stale = false
-            if let url = try? URL(resolvingBookmarkData: bookmark, options: [.withoutUI], relativeTo: nil, bookmarkDataIsStale: &stale) {
+            if let url = try? URL(resolvingBookmarkData: bookmark, options: [.withoutUI], relativeTo: nil, bookmarkDataIsStale: &stale),
+               !LocalHealthProbe.isTrashed(url, originalLocation: entry.location) {
                 if url.path != entry.location || stale {
                     var updated = entry
                     updated.location = url.path
@@ -403,15 +424,86 @@ final class LibraryStore: ObservableObject {
         }
         return entry.url
     }
-    func open(_ entry: LibraryEntry) {
+    static func isMissingFileError(_ error: Error) -> Bool {
+        var stack: [NSError] = [error as NSError]
+        var visited = Set<ObjectIdentifier>()
+        while let nsError = stack.popLast() {
+            guard visited.insert(ObjectIdentifier(nsError)).inserted else { continue }
+            if nsError.domain == NSCocoaErrorDomain && (nsError.code == NSFileNoSuchFileError || nsError.code == NSFileReadNoSuchFileError) {
+                return true
+            }
+            if nsError.domain == NSPOSIXErrorDomain && nsError.code == Int(ENOENT) {
+                return true
+            }
+            if nsError.domain == NSOSStatusErrorDomain && (nsError.code == -43 || nsError.code == -120) {
+                return true
+            }
+            if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorFileDoesNotExist {
+                return true
+            }
+            stack.append(contentsOf: nsError.underlyingErrors.map { $0 as NSError })
+        }
+        return false
+    }
+    private func promptMissingEntry(_ entry: LibraryEntry, onMissing: (@MainActor () -> Void)?) {
+        guard let live = data.entries.first(where: { $0.id == entry.id }) else { return }
+        if missingEntry == nil { missingEntry = live }
+        onMissing?()
+    }
+    @discardableResult func deleteMissingEntry() -> Bool {
+        guard let entry = missingEntry else { return false }
+        missingEntry = nil
+        guard data.entries.contains(where: { $0.id == entry.id }) else { return false }
+        return remove([entry.id]) > 0
+    }
+    func open(_ entry: LibraryEntry, onMissing: (@MainActor () -> Void)? = nil) {
         guard let url = resolve(entry) else { return }
-        NSWorkspace.shared.open(url, configuration: .init()) { _, error in
-            if let error { Task { @MainActor in self.error = "Could not open \(entry.name): \(error.localizedDescription)" } }
+        let current = data.entries.first(where: { $0.id == entry.id }) ?? entry
+        if current.kind != .url {
+            let check = localCheck(current)
+            if check.status == .missing {
+                promptMissingEntry(current, onMissing: onMissing)
+                return
+            }
+            if check.status == .unavailableVolume {
+                error = "Could not open \(current.name): \(check.detail)"
+                return
+            }
+        }
+        workspaceOpener(url) { [weak self] openError in
+            guard let openError else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if current.kind != .url, Self.isMissingFileError(openError) {
+                    let recheck = self.localCheck(current)
+                    if recheck.status == .unavailableVolume || recheck.status == .permissionDenied || recheck.status == .notDownloaded {
+                        self.error = "Could not open \(current.name): \(recheck.detail)"
+                    } else if recheck.status == .missing || !FileManager.default.fileExists(atPath: url.path) {
+                        self.promptMissingEntry(current, onMissing: onMissing)
+                    } else {
+                        self.error = "Could not open \(current.name): \(openError.localizedDescription)"
+                    }
+                } else {
+                    self.error = "Could not open \(current.name): \(openError.localizedDescription)"
+                }
+            }
         }
     }
-    func reveal(_ entry: LibraryEntry) {
+    func reveal(_ entry: LibraryEntry, onMissing: (@MainActor () -> Void)? = nil) {
         guard let url = resolve(entry), url.isFileURL else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([url])
+        let current = data.entries.first(where: { $0.id == entry.id }) ?? entry
+        if current.kind != .url {
+            let check = localCheck(current)
+            if check.status == .missing {
+                promptMissingEntry(current, onMissing: onMissing)
+                return
+            }
+            if check.status == .unavailableVolume {
+                error = "Could not show \(current.name) in Finder: \(check.detail)"
+                return
+            }
+        }
+        finderRevealer(url)
     }
 }
 

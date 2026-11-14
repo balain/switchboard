@@ -246,11 +246,11 @@ struct LibraryCommands: Commands {
                 let keyWindow = NSApp?.keyWindow
                 let mainWindow = NSApp?.mainWindow
                 let editing = keyWindow?.firstResponder is NSText
-                let modal = keyWindow?.sheetParent != nil || keyWindow?.attachedSheet != nil || mainWindow?.attachedSheet != nil || store.error != nil
+                let modal = keyWindow?.sheetParent != nil || keyWindow?.attachedSheet != nil || mainWindow?.attachedSheet != nil || store.error != nil || store.missingEntry != nil
                 _ = window.requestRemoveSelection(in: store.data, editingText: editing, hasExternalModal: modal)
             }
             .keyboardShortcut(.delete, modifiers: .command)
-            .disabled(window?.canRemoveSelection(in: store.data, editingText: responderState.editingText, hasExternalModal: responderState.hasModalSheet || store.error != nil) != true)
+            .disabled(window?.canRemoveSelection(in: store.data, editingText: responderState.editingText, hasExternalModal: responderState.hasModalSheet || store.error != nil || store.missingEntry != nil) != true)
         }
     }
 }

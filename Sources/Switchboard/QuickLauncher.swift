@@ -104,8 +104,25 @@ import Combine
         }
         return entry
     }
-    func open() { guard let entry = selectedEntry() else { return }; dismiss(restoreFocus: false); store.open(entry) }
-    func revealInFinder() { guard let entry = selectedEntry(), entry.kind != .url else { return }; dismiss(restoreFocus: false); store.reveal(entry) }
+    private func presentLibraryForMissingEntry() {
+        if let registration = windows.values.first(where: { $0.window?.isVisible == true || $0.window?.isMiniaturized == true }),
+           let window = registration.window {
+            window.deminiaturize(nil); NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil)
+        } else {
+            NSApp?.activate(ignoringOtherApps: true)
+            openLibrary?()
+        }
+    }
+    func open() {
+        guard let entry = selectedEntry() else { return }
+        dismiss(restoreFocus: false)
+        store.open(entry) { [weak self] in self?.presentLibraryForMissingEntry() }
+    }
+    func revealInFinder() {
+        guard let entry = selectedEntry(), entry.kind != .url else { return }
+        dismiss(restoreFocus: false)
+        store.reveal(entry) { [weak self] in self?.presentLibraryForMissingEntry() }
+    }
     func copyLocation() {
         guard let entry = selectedEntry() else { return }
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(entry.location, forType: .string); dismiss()

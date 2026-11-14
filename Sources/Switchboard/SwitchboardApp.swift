@@ -327,6 +327,18 @@ struct ContentView: View {
                 let valid: [URL] = urls.filter { url in url.isFileURL || LibraryLogic.webURL(url.absoluteString) != nil }
                 store.add(valid, collectionID: collectionID); return !valid.isEmpty
             } isTargeted: { dropTarget = $0 }
+            .alert(
+                store.missingEntry?.kind == .folder ? "Folder doesn’t exist" : "File doesn’t exist",
+                isPresented: Binding(get: { store.missingEntry != nil && store.error == nil }, set: { if !$0 { store.missingEntry = nil } }),
+                presenting: store.missingEntry
+            ) { _ in
+                Button("Cancel", role: .cancel) { store.missingEntry = nil }
+                Button("Delete Entry", role: .destructive) {
+                    if store.deleteMissingEntry() { window.validate(in: store.data) }
+                }
+            } message: { missing in
+                Text("“\(missing.name)” could not be found at \(missing.location). Do you want to delete this entry from your library?")
+            }
             .inspector(isPresented: $window.showInspector) {
                 if let id = window.selection.first, window.selection.count == 1,
                    let entry = store.data.entries.first(where: { $0.id == id }) {
