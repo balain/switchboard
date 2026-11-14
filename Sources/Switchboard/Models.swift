@@ -158,10 +158,11 @@ enum LibraryLogic {
     }
 
     static func descendants(of id: UUID, in collections: [LibraryCollection]) -> Set<UUID> {
+        let children = Dictionary(grouping: collections, by: \.parentID)
         var result: Set<UUID> = [id]
         var pending = [id]
         while let parent = pending.popLast() {
-            for child in collections where child.parentID == parent && result.insert(child.id).inserted {
+            for child in children[parent] ?? [] where result.insert(child.id).inserted {
                 pending.append(child.id)
             }
         }

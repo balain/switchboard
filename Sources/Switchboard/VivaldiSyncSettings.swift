@@ -10,7 +10,10 @@ struct VivaldiSyncSettings: View {
             Text("Vivaldi Bookmark Sync").font(.title2.bold())
             Text("Sync titles, HTTP/HTTPS URLs, and folder placement through the companion Vivaldi extension. In Vivaldi, choose all bookmarks or any combination of bookmarks and folders. The Vivaldi Bookmarks collection contains this connection’s items; notes, tags, favorites, and local files stay in Switchboard.")
                 .font(.callout).foregroundStyle(.secondary)
-            Text(sync.message).textSelection(.enabled)
+            if sync.message.contains("\n") {
+                ScrollView { Text(sync.message).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
+                    .frame(maxHeight: 140)
+            } else { Text(sync.message).textSelection(.enabled) }
             if let date = sync.lastSync { Text("Last completed sync: \(date.formatted())").font(.caption).foregroundStyle(.secondary) }
             HStack {
                 if sync.enabled { Button("Pause") { sync.pause() } }

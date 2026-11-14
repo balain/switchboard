@@ -8,6 +8,7 @@ struct HealthReport: View {
     @State private var selection: Set<UUID> = []
     @State private var filter = "All"
     @State private var removing = false
+    @State private var showDuplicates = false
     private var findings: [HealthFinding] {
         scan.findings.filter { filter == "All" || (filter == "Duplicates" ? !$0.duplicates.isEmpty : $0.check.status != .healthy) }
             .sorted { $0.entry.name.localizedStandardCompare($1.entry.name) == .orderedAscending }
@@ -19,6 +20,7 @@ struct HealthReport: View {
             HStack {
                 Button("Check Local References") { selection = []; scan.scan(store.data.entries, includeWeb: false) }
                 Button("Check Web Links") { selection = []; scan.scan(store.data.entries, includeWeb: true) }
+                Button("Find Duplicates…") { showDuplicates = true }
                 Button("Cancel Scan") { scan.cancel(); scan.message = "Scan cancelled." }.disabled(!scan.running)
                 Picker("Show", selection: $filter) { ForEach(["All", "Needs attention", "Duplicates"], id: \.self) { Text($0).tag($0) } }
             }
@@ -44,6 +46,7 @@ struct HealthReport: View {
         }.padding(24).frame(width: 860, height: 600)
         .onChange(of: store.data.entries) { _, value in scan.discardStale(in: value); selection.formIntersection(Set(scan.findings.map(\.id))) }
         .onDisappear { scan.cancel() }
+        .sheet(isPresented: $showDuplicates) { DuplicateReview(store: store) }
         .alert("Remove these library references?", isPresented: $removing) {
             Button("Cancel", role: .cancel) { }
             Button("Remove", role: .destructive) {

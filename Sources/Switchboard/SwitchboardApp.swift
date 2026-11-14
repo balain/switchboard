@@ -127,6 +127,8 @@ struct ContentView: View {
         .onChange(of: store.data.entries.map(\.id)) { _, _ in window.validate(in: store.data) }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in store.save() }
         .sheet(isPresented: $window.showHealth) { HealthReport(store: store) }
+        .sheet(isPresented: $window.showDuplicates) { DuplicateReview(store: store) }
+        .sheet(isPresented: $window.showEntryRemoval) { EntryRemovalReview(store: store) }
         .sheet(isPresented: $window.showLibraryTransfer) { LibraryTransferPanel(store: store) }
         .onReceive(NotificationCenter.default.publisher(for: .libraryReplaced)) { _ in window.validate(in: store.data) }
         .sheet(isPresented: $window.showRules) { RuleManager(store: store) }
@@ -148,22 +150,30 @@ struct ContentView: View {
             Button("OK") { store.error = nil }
         } message: { Text(store.error ?? "") }
     }
+    private func sidebarScope(_ snapshot: LibrarySidebarSnapshot) -> Binding<String> {
+        Binding(get: {
+            if let id = collectionID, snapshot.vivaldiCollectionIDs.contains(id), let root = snapshot.vivaldiRoot { return root.uuidString }
+            return window.scope
+        }, set: { window.scope = $0 })
+    }
     private var sidebar: some View {
-            List(selection: $window.scope) {
+        let snapshot = LibrarySidebarSnapshot(data: store.data)
+        return List(selection: sidebarScope(snapshot)) {
                 Section("LIBRARY") {
                     sidebarRow("All entries", icon: "square.stack.3d.up", value: "all", count: store.data.entries.count)
-                    sidebarRow("Favorites", icon: "star", value: "favorites", count: store.data.entries.filter(\.favorite).count)
+                    sidebarRow("Favorites", icon: "star", value: "favorites", count: snapshot.favorites)
                 }
                 Section("KINDS") {
                     ForEach(EntryKind.allCases) { kind in
                         sidebarRow(kind == .url ? "URLs" : kind.title + "s", icon: kind.icon, value: kind.rawValue,
-                                   count: store.data.entries.filter { $0.kind == kind }.count)
+                                   count: snapshot.kinds[kind, default: 0])
                     }
                 }
                 Section {
-                    ForEach(store.data.collections) { collection in
+                    ForEach(snapshot.collections) { collection in
                         sidebarRow(LibraryLogic.collectionPath(collection, in: store.data.collections), icon: collection.symbol,
-                                   value: collection.id.uuidString, count: store.data.entries.filter { $0.collectionID == collection.id }.count)
+                                   value: collection.id.uuidString, count: snapshot.collectionCounts[collection.id, default: 0])
+                            .onTapGesture { window.scope = collection.id.uuidString }
                             .listRowBackground(collection.palette?.color.opacity(0.18))
                     }
                     Button { window.showCollections = true } label: { Label("Manage collections…", systemImage: "folder.badge.gearshape") }
@@ -184,7 +194,7 @@ struct ContentView: View {
                             HStack {
                                 Label(tag.name, systemImage: tag.symbol)
                                 Spacer()
-                                Text("\(store.data.entries.filter { $0.tags.contains(tag.name) }.count)")
+                                Text("\(snapshot.tags[tag.name, default: 0])")
                                     .font(.caption).foregroundStyle(.tertiary)
                             }
                         }.toggleStyle(.checkbox)
@@ -438,12 +448,12 @@ struct ContentView: View {
                 .contentShape(Rectangle())
                 .entryHoverInfo(entry, collection: collectionName(for: entry), excerpt: contentMatch(for: entry)?.snippet)
                 .tag(entry.id)
-                .simultaneousGesture(TapGesture(count: 1).onEnded { openOnSingleClick(entry) })
-                .contextMenu { entryMenu(entry) }
+                .modifier(EntryOpenInteraction(singleClick: singleClick, open: { select(entry.id, modifiers: []); store.open(entry) }))
             }
         }.listStyle(.inset)
         .contextMenu(forSelectionType: UUID.self) { ids in
-            BulkActions(store: store, ids: ids) { removeIDs = $0 }.disabled(ids.isEmpty)
+            if let entry = entries.first(where: { ids.contains($0.id) }), ids.count == 1 { entryMenu(entry) }
+            else { BulkActions(store: store, ids: ids) { removeIDs = $0 }.disabled(ids.isEmpty) }
         } primaryAction: { ids in
             if !singleClick || NSApp.currentEvent?.type == .keyDown {
                 for entry in entries where ids.contains(entry.id) { store.open(entry) }
@@ -458,7 +468,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .entryHoverInfo(entry, collection: collectionName(for: entry), excerpt: contentMatch(for: entry)?.snippet)
-            .simultaneousGesture(TapGesture(count: 1).onEnded { openOnSingleClick(entry) })
+            .modifier(EntryOpenInteraction(singleClick: singleClick, open: { select(entry.id, modifiers: []); store.open(entry) }))
     }
     var table: some View {
         Table(entries, selection: $window.selection) {
@@ -498,9 +508,6 @@ struct ContentView: View {
                 for entry in entries where ids.contains(entry.id) { store.open(entry) }
             }
         }
-    }
-    func openOnSingleClick(_ entry: LibraryEntry) {
-        if singleClick, NSEvent.modifierFlags.intersection([.command, .shift]).isEmpty { store.open(entry) }
     }
     func select(_ id: UUID, modifiers: NSEvent.ModifierFlags = NSEvent.modifierFlags) {
         if modifiers.contains(.command) {

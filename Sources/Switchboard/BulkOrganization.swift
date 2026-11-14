@@ -66,24 +66,48 @@ final class UndoRouting: ObservableObject {
     }
 }
 
+/// Preserve mouse-down modifiers without a drag recognizer competing with taps.
+@MainActor
+private final class EntryClickModifiers {
+    static let shared = EntryClickModifiers()
+    private(set) var flags: NSEvent.ModifierFlags = []
+    private var monitor: Any?
+    private init() {
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            MainActor.assumeIsolated { self?.flags = event.modifierFlags }
+            return event
+        }
+    }
+}
+
 struct EntryClickInteraction: ViewModifier {
     let singleClick: Bool
     let select: (NSEvent.ModifierFlags) -> Void
     let open: () -> Void
-    @State private var modifiers: NSEvent.ModifierFlags = []
-    @State private var tracking = false
+    private let pointer = EntryClickModifiers.shared
     func body(content: Content) -> some View {
         content
-            .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in
-                if !tracking {
-                    modifiers = NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags
-                    tracking = true
-                }
-            }.onEnded { _ in tracking = false })
             .gesture(TapGesture(count: singleClick ? 1 : 2).onEnded {
+                let modifiers = pointer.flags
                 select(modifiers)
                 if modifiers.intersection([.command, .shift]).isEmpty { open() }
             })
-            .simultaneousGesture(TapGesture().onEnded { if !singleClick { select(modifiers) } })
+            .simultaneousGesture(TapGesture().onEnded { if !singleClick { select(pointer.flags) } })
+    }
+}
+
+/// Preserve native selection and double-click handling in the default mode.
+struct EntryOpenInteraction: ViewModifier {
+    let singleClick: Bool
+    let open: () -> Void
+    private let pointer = EntryClickModifiers.shared
+    func body(content: Content) -> some View {
+        if singleClick {
+            content.simultaneousGesture(TapGesture().onEnded {
+                if pointer.flags.intersection([.command, .shift, .control]).isEmpty { open() }
+            })
+        } else {
+            content
+        }
     }
 }

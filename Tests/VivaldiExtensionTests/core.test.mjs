@@ -41,3 +41,25 @@ test('recovery creates a separate folder and never updates or deletes existing b
   await assert.rejects(()=>restoreSnapshot(api,[node('x','Bad',null,'javascript:alert(1)')],'destination',0));
   assert.equal(created.length,3);
 });
+
+test('URL comparisons accept browser encoding differences without hiding query or fragment changes', async () => {
+  const {acknowledgementNodes} = await import('../../Extensions/Vivaldi/sync-core.mjs');
+  const wanted = node('s:new', 'Unicode page', null, 'https://EXAMPLE.com/a file/Ω?q=hello world#section');
+  const actual = node('42', 'Unicode page', null, 'https://example.com/a%20file/%CE%A9?q=hello%20world#section');
+  const ack = acknowledgementNodes([actual], [wanted], {'s:new':'42'});
+  assert.equal(ack[0].url, wanted.url); assert.equal(ack[0].id, '42');
+  assert.throws(() => acknowledgementNodes([{...actual,url:actual.url.replace('hello%20world','other')}],[wanted],{'s:new':'42'}));
+  assert.throws(() => acknowledgementNodes([{...actual,url:actual.url.replace('#section','#different')}],[wanted],{'s:new':'42'}));
+  assert(equal([node('1','Home',null,'https://example.com')],[node('1','Home',null,'https://example.com/')]));
+  assert.deepEqual(operations([node('1','Home',null,'https://example.com')],[node('1','Home',null,'https://example.com/')]),[]);
+});
+test('invalid bookmark diagnostics identify the folder and title without exposing address credentials or queries', () => {
+  const invalid=[{id:'0',children:[{id:'1',title:'Research',parentId:'0',children:[{id:'2',parentId:'1',title:'Broken report',url:'https://user:private-password@?token=private-token'}]}]}];
+  assert.throws(()=>snapshot(invalid,['0']), error=>{
+    assert.match(error.message,/Research \/ Broken report/);assert.match(error.message,/malformed web address/);
+    assert(!error.message.includes('private-password'));assert(!error.message.includes('private-token'));return true;
+  });
+  invalid[0].children[0].children[0].url='vivaldi://settings';
+  assert.throws(()=>snapshot(invalid,['0'],new Set(['2'])),/Research \/ Broken report/);
+  assert.equal(snapshot(invalid,['0']).skipped,1);
+});

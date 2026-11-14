@@ -38,7 +38,7 @@ struct CollectionManager: View {
             }
             Divider()
             HStack {
-                Text("Deleting a collection keeps its items and moves subcollections up one level.")
+                Text("Items stay in your library. Choose whether to keep or delete subcollections.")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 Button("Done") { saveDraft(); dismiss() }.keyboardShortcut(.defaultAction)
@@ -52,15 +52,26 @@ struct CollectionManager: View {
         }
         .alert("Delete collection?", isPresented: $deleting) {
             Button("Cancel", role: .cancel) { }
-            Button("Delete", role: .destructive) {
-                if let selected { store.removeCollection(selected) }
-                draft = nil
-                selected = store.data.collections.first?.id
-                loadDraft()
+            Button("Delete Collection Only", role: .destructive) { deleteSelected(includingSubcollections: false) }
+            if subcollectionCount > 0 {
+                Button("Delete With Subcollections", role: .destructive) { deleteSelected(includingSubcollections: true) }
             }
         } message: {
-            Text("Items remain in your library. Subcollections move to the deleted collection’s parent.")
+            if subcollectionCount > 0 {
+                Text("Items remain in your library in either case. Delete only this collection to move its subcollections to its parent, or delete it together with \(subcollectionCount) \(subcollectionCount == 1 ? "subcollection" : "subcollections").")
+            } else { Text("Items remain in your library. This collection has no subcollections.") }
         }
+    }
+
+    private var subcollectionCount: Int {
+        guard let selected else { return 0 }
+        return max(0, LibraryLogic.descendants(of: selected, in: store.data.collections).count - 1)
+    }
+    private func deleteSelected(includingSubcollections: Bool) {
+        guard let selected, store.removeCollection(selected, includingSubcollections: includingSubcollections) else { return }
+        draft = nil
+        self.selected = store.data.collections.first?.id
+        loadDraft()
     }
 
     private func field<Value>(_ path: WritableKeyPath<LibraryCollection, Value>, fallback: Value) -> Binding<Value> {

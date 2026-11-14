@@ -59,12 +59,16 @@ struct VivaldiConfiguration: Codable {
             try saveConfiguration()
             let connection = configuration.connection
             let server = try VivaldiBridge(port: configuration.port, token: configuration.token) { [weak self] bytes in
-                try await MainActor.run {
-                    guard let self, self.enabled, self.configuration.connection == connection else { throw TransferError(message: "Sync is paused.") }
-                    do {
-                        let request = try JSONDecoder().decode(VivaldiRequest.self, from: bytes)
-                        return try JSONEncoder().encode(self.handle(request))
-                    } catch { self.message = error.localizedDescription; throw error }
+                do {
+                    let request = try JSONDecoder().decode(VivaldiRequest.self, from: bytes)
+                    let response = try await MainActor.run {
+                        guard let self, self.enabled, self.configuration.connection == connection else { throw TransferError(message: "Sync is paused.") }
+                        return try self.handle(request)
+                    }
+                    return try JSONEncoder().encode(response)
+                } catch {
+                    await MainActor.run { self?.message = error.localizedDescription }
+                    throw error
                 }
             }
             server.ready = { [weak self, weak server] result in
@@ -97,7 +101,7 @@ struct VivaldiConfiguration: Codable {
         guard request.client.count >= 16, request.client.count <= 128, !request.scope.isEmpty, request.scope.count <= 256 else { throw TransferError(message: "Invalid browser identity or scope.") }
         guard configuration.client == nil || configuration.client == request.client else { throw TransferError(message: "This pairing belongs to another Vivaldi profile. Pair again for a different profile.") }
         guard !configuration.reconnectRequired else { throw TransferError(message: "Pair again after restoring the library.") }
-        try VivaldiGraph.validate(request.nodes)
+        try VivaldiGraph.validate(request.nodes, source: "Vivaldi")
         if request.nodes.contains(where: { $0.id.hasPrefix("s:") }) { throw TransferError(message: "Browser identifiers cannot use local identifiers.") }
         var binding: VivaldiBinding
         if let current = store.data.vivaldi, current.connection == configuration.connection {
@@ -111,6 +115,7 @@ struct VivaldiConfiguration: Codable {
             data.vivaldi = binding
             guard store.commitVivaldi(data, checkpoint: true) else { throw TransferError(message: store.error ?? "Could not create the synced collection.") }
         }
+        let newClient = configuration.client != request.client
         configuration.client = request.client
         if request.action == "ack", request.transaction == binding.lastTransaction, request.transaction != nil {
             if configuration.pending?.id == request.transaction { configuration.pending = nil }
@@ -158,6 +163,13 @@ struct VivaldiConfiguration: Codable {
         }
         guard request.action == "plan" else { throw TransferError(message: "No pending transaction matches this acknowledgement.") }
         let local = try VivaldiGraph.local(store.data, binding: binding)
+        // Still validate both live snapshots, but skip merge, hashing and disk writes when unchanged.
+        if local == binding.baseline && local == VivaldiGraph.sorted(request.nodes) {
+            if newClient { try saveConfiguration() }
+            conflicts = []; choices = [:]; deletions = 0; deletionDigest = nil; approvedDeletion = nil
+            lastSync = Date(); message = "Up to date. \(local.count) bookmarks and folders."
+            return VivaldiResponse(status: "complete", message: message)
+        }
         var outgoing = local
         let baseline = Dictionary(uniqueKeysWithValues: binding.baseline.map { ($0.id, $0) })
         for index in outgoing.indices where outgoing[index].parent == nil && (outgoing[index].id.hasPrefix("s:") || baseline[outgoing[index].id]?.parent != nil) {
@@ -182,10 +194,6 @@ struct VivaldiConfiguration: Codable {
         deletionDigest = VivaldiGraph.digest([local, VivaldiGraph.sorted(request.nodes), result.desired])
         if removed > 0 && (removed >= 10 || removed * 2 >= max(1, binding.baseline.count)), approvedDeletion != deletionDigest {
             deletions = removed; message = "Review deletion of \(removed) synced bookmarks or folders."; try saveConfiguration(); return VivaldiResponse(status: "review", message: message)
-        }
-        if result.desired == local && local == VivaldiGraph.sorted(request.nodes) && local == binding.baseline {
-            try saveConfiguration(); lastSync = Date(); message = "Up to date. \(local.count) bookmarks and folders."
-            return VivaldiResponse(status: "complete", message: message)
         }
         configuration.pending = VivaldiPending(id: UUID(), scope: request.scope, local: local, browser: VivaldiGraph.sorted(request.nodes), desired: result.desired)
         try saveConfiguration(); approvedDeletion = nil

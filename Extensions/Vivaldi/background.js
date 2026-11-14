@@ -1,8 +1,9 @@
 import {restoreSnapshot} from './recovery.mjs';
-import {parsePairing, snapshot, operations, canonical, advance, equal} from './sync-core.mjs';
+import {acknowledgementNodes, comparableURL, parsePairing, snapshot, operations, canonical, advance, equal} from './sync-core.mjs';
 
 let active = false, requested = false;
-const state = () => chrome.storage.local.get(null);
+// Recovery snapshots can be several megabytes; ordinary polls only need live settings.
+const state = () => chrome.storage.local.get(['endpoint', 'token', 'client', 'scope', 'selected', 'destination', 'enabled', 'knownIDs', 'journal']);
 const save = value => chrome.storage.local.set(value);
 async function status(message) { await save({status: message}); }
 async function post(settings, action, extra = {}) {
@@ -65,7 +66,7 @@ async function finish(settings, journal) {
           await chrome.bookmarks.remove(id);
         } else {
           if (op.before.parent !== op.node.parent) await chrome.bookmarks.move(id, {parentId: await destination(op.node, journal, settings)});
-          await chrome.bookmarks.update(id, {title: op.node.title, ...(op.node.url ? {url: op.node.url} : {})});
+          await chrome.bookmarks.update(id, {title: op.node.title, ...(op.node.url && comparableURL(op.node.url) !== comparableURL(op.before.url) ? {url: op.node.url} : {})});
         }
       }
     }
@@ -75,7 +76,7 @@ async function finish(settings, journal) {
   }
   const final = await current(settings, journal.created);
   if (!equal(final.canonical, journal.desired)) throw new Error('Bookmarks changed before acknowledgement. Reconcile interrupted sync.');
-  const result = await post(settings, 'ack', {transaction: journal.transaction, created: journal.created, nodes: final.nodes});
+  const result = await post(settings, 'ack', {transaction: journal.transaction, created: journal.created, nodes: acknowledgementNodes(final.nodes, journal.desired, journal.created)});
   if (result.status !== 'complete') throw new Error(result.message || 'Acknowledgement failed.');
   await save({journal: null, knownIDs: final.nodes.map(n => n.id), status: result.message + (final.skipped ? ` ${final.skipped} non-web bookmarks were excluded.` : ''), lastSync: Date.now()});
 }
@@ -95,11 +96,13 @@ async function synchronize() {
     const ops = operations(browser.nodes, response.desired);
     const journal = {transaction: response.transaction, desired: response.desired, operations: ops, index: 0, created: {}, working: browser.nodes, inFlight: false};
     // Recovery snapshots are taken before any browser mutation, bounded to the latest 20 batches.
-    const backups = settings.backups ?? [];
-    if (ops.length) backups.unshift({date: Date.now(), nodes: browser.nodes});
-    await save({journal, backups: backups.slice(0, 20)});
+    if (ops.length) {
+      const {backups = []} = await chrome.storage.local.get('backups');
+      backups.unshift({date: Date.now(), nodes: browser.nodes});
+      await save({journal, backups: backups.slice(0, 20)});
+    } else { await save({journal}); }
     await finish(settings, journal);
-  } catch (error) { await status(error.message + ' No sync will complete until this is resolved.'); }
+  } catch (error) { await status(error.message + '\nThis sync attempt stopped. Fix the issue above, then choose Sync now.'); }
   finally { active = false; if (requested) { requested = false; schedule(); } }
 }
 function schedule() { chrome.alarms.create('switchboard-soon', {when: Date.now() + 1500}); }
@@ -128,7 +131,7 @@ async function reconcile() {
   schedule();
 }
 async function downloadBackup() {
-  const {backups = []} = await state();
+  const {backups = []} = await chrome.storage.local.get('backups');
   if (!backups.length) throw new Error('No browser recovery snapshots yet.');
   // Returned to the trusted options page, which offers a local JSON download.
   return JSON.stringify({schemaVersion: 1, snapshots: backups}, null, 2);
@@ -165,7 +168,8 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       try {
         const settings = await state();
         if (settings.enabled) throw new Error('Pause sync in Vivaldi before restoring a recovery snapshot.');
-        const backup = settings.backups?.[0];
+        const {backups = []} = await chrome.storage.local.get('backups');
+        const backup = backups[0];
         if (!backup) throw new Error('No browser recovery snapshots yet.');
         const folder = await restoreSnapshot(chrome.bookmarks, backup.nodes, settings.destination, backup.date);
         await status('Recovered into a new folder: ' + folder.title + '. Existing bookmarks were kept.');

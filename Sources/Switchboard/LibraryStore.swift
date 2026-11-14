@@ -372,13 +372,21 @@ final class LibraryStore: ObservableObject {
         }
         var candidate = data; candidate.collections[index] = collection; _ = commit(candidate)
     }
-    func removeCollection(_ id: UUID) {
+    @discardableResult
+    func removeCollection(_ id: UUID, includingSubcollections: Bool = false) -> Bool {
+        guard let collection = data.collections.first(where: { $0.id == id }) else { return false }
+        let removed: Set<UUID> = includingSubcollections ? LibraryLogic.descendants(of: id, in: data.collections) : [id]
         var candidate = data
-        let parent = candidate.collections.first { $0.id == id }?.parentID
-        for index in candidate.collections.indices where candidate.collections[index].parentID == id { candidate.collections[index].parentID = parent }
-        candidate.collections.removeAll { $0.id == id }
-        for index in candidate.entries.indices where candidate.entries[index].collectionID == id { candidate.entries[index].collectionID = nil }
-        _ = commit(candidate)
+        if !includingSubcollections {
+            for index in candidate.collections.indices where candidate.collections[index].parentID == id {
+                candidate.collections[index].parentID = collection.parentID
+            }
+        }
+        candidate.collections.removeAll { removed.contains($0.id) }
+        for index in candidate.entries.indices where candidate.entries[index].collectionID.map(removed.contains) == true {
+            candidate.entries[index].collectionID = nil
+        }
+        return commit(candidate)
     }
     func resolve(_ entry: LibraryEntry) -> URL? {
         if let bookmark = entry.bookmark {

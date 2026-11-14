@@ -41,6 +41,8 @@ final class LibraryWindowState: ObservableObject {
         revealedEntry = nil; revealScope = nil; selection = []
     }
     @Published var showHealth = false
+    @Published var showDuplicates = false
+    @Published var showEntryRemoval = false
     @Published var showLibraryTransfer = false
     @Published var showRules = false
     @Published var showRulePreview = false
@@ -128,6 +130,8 @@ struct LibraryCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("Vivaldi Bookmark Sync…") { openWindow(id: "vivaldi-sync") }
             Button("Library Health…") { window?.showHealth = true }.disabled(window == nil)
+            Button("Find Duplicates…") { window?.showDuplicates = true }.disabled(window == nil)
+            Button("Find and Remove Entries…") { window?.showEntryRemoval = true }.disabled(window == nil)
             Button("Import, Export, and Backups…") { window?.showLibraryTransfer = true }.disabled(window == nil)
             Button("Quick Launcher…") { launcher.toggle() }
             Divider()

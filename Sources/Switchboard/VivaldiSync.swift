@@ -36,26 +36,45 @@ enum VivaldiGraph {
         return SHA256.hash(data: (try? encoder.encode(value)) ?? Data()).map { String(format: "%02x", $0) }.joined()
     }
     static func sorted(_ nodes: [VivaldiNode]) -> [VivaldiNode] { nodes.sorted { $0.id < $1.id } }
-    static func validate(_ nodes: [VivaldiNode]) throws {
+    static func bookmarkPath(_ node: VivaldiNode, in byID: [String: VivaldiNode]) -> String {
+        var names = [String(node.title.prefix(120))]; var parent = node.parent; var seen: Set<String> = [node.id]
+        while let id = parent, seen.count < 128, seen.insert(id).inserted, let folder = byID[id] {
+            names.insert(String(folder.title.prefix(120)), at: 0); parent = folder.parent
+        }
+        return String(names.joined(separator: " / ").prefix(500))
+    }
+    static func validate(_ nodes: [VivaldiNode], source: String = "Sync snapshot") throws {
         guard nodes.count <= limit, Set(nodes.map(\.id)).count == nodes.count else { throw TransferError(message: "Invalid or oversized bookmark snapshot.") }
         let byID = Dictionary(uniqueKeysWithValues: nodes.map { ($0.id, $0) })
+        var addressProblems: [String] = []
+        for node in nodes {
+            if let address = node.url {
+                let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines))
+                let scheme = url?.scheme?.lowercased() ?? ""
+                if !["http", "https"].contains(scheme) || url?.host?.isEmpty != false || url?.host?.contains(" ") == true {
+                    let reason = ["http", "https"].contains(scheme) ? "malformed web address (a valid hostname is required)" : "unsupported address type \(scheme.isEmpty ? "unknown" : String(scheme.prefix(32)))"
+                    addressProblems.append("• \(bookmarkPath(node, in: byID)): \(reason).")
+                }
+            }
+        }
+        if !addressProblems.isEmpty {
+            let more = addressProblems.count > 5 ? "\nAnd \(addressProblems.count - 5) more affected bookmarks." : ""
+            throw TransferError(message: "\(source): cannot sync \(addressProblems.count) bookmark(s).\n" + addressProblems.prefix(5).joined(separator: "\n") + more + "\nEdit the listed bookmark’s address, then choose Sync now. Only HTTP and HTTPS addresses with a hostname are supported.")
+        }
         for node in nodes {
             guard !node.id.isEmpty, node.id.count <= 128, !node.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  node.title.utf8.count <= 16_384, (node.url?.utf8.count ?? 0) <= 16_384 else { throw TransferError(message: "Invalid bookmark fields.") }
-            if let url = node.url {
-                guard let parsed = LibraryLogic.webURL(url), parsed.absoluteString == url else { throw TransferError(message: "Only HTTP and HTTPS bookmarks can sync.") }
-            }
+                  node.title.utf8.count <= 16_384, (node.url?.utf8.count ?? 0) <= 16_384 else { throw TransferError(message: "\(source): invalid bookmark fields at ‘\(bookmarkPath(node, in: byID))’.") }
             var parent = node.parent; var seen: Set<String> = [node.id]
             while let id = parent {
                 guard seen.count < 128, seen.insert(id).inserted, let folder = byID[id], folder.url == nil else {
-                    throw TransferError(message: "Bookmark folders contain an unavailable parent or a cycle.")
+                    throw TransferError(message: "\(source): bookmark folder ‘\(bookmarkPath(node, in: byID))’ has an unavailable parent or a cycle.")
                 }
                 parent = folder.parent
             }
         }
     }
     static func merge(base: [VivaldiNode], local: [VivaldiNode], browser: [VivaldiNode], choices: [String: Bool]) throws -> VivaldiMerge {
-        try validate(base); try validate(local); try validate(browser)
+        try validate(base, source: "Last synchronized state"); try validate(local, source: "Switchboard"); try validate(browser, source: "Vivaldi")
         let b = Dictionary(uniqueKeysWithValues: base.map { ($0.id, $0) })
         let l = Dictionary(uniqueKeysWithValues: local.map { ($0.id, $0) })
         let r = Dictionary(uniqueKeysWithValues: browser.map { ($0.id, $0) })
@@ -100,7 +119,7 @@ enum VivaldiGraph {
         result += data.entries.filter { $0.kind == .url && $0.collectionID.map(scope.contains) == true }.map {
             VivaldiNode(id: key($0.id), title: $0.name, parent: parent($0.collectionID), url: $0.location)
         }
-        try validate(result); return sorted(result)
+        try validate(result, source: "Switchboard"); return sorted(result)
     }
     static func remap(_ nodes: [VivaldiNode], created: [String: String]) -> [VivaldiNode] {
         sorted(nodes.map { node in var copy = node; copy.id = created[node.id] ?? node.id; copy.parent = node.parent.map { created[$0] ?? $0 }; return copy })
@@ -136,24 +155,30 @@ enum VivaldiGraph {
             state.mapping[created[node.id] ?? node.id] = node.id.hasPrefix("s:") ? UUID(uuidString: String(node.id.dropFirst(2))) ?? UUID() : UUID()
         }
         func localID(_ key: String) -> UUID? { state.mapping[created[key] ?? key] ?? (key.hasPrefix("s:") ? UUID(uuidString: String(key.dropFirst(2))) : nil) }
+        var entryIndices = Dictionary(uniqueKeysWithValues: candidate.entries.enumerated().map { ($0.element.id, $0.offset) })
+        var collectionIndices = Dictionary(uniqueKeysWithValues: candidate.collections.enumerated().map { ($0.element.id, $0.offset) })
+        var removed: Set<UUID> = []
         for key in Set(original.keys).union(target.keys) where now[key] == original[key] {
             guard let id = localID(key) else { continue }
             if let node = target[key] {
                 let parent = node.parent.flatMap(localID) ?? state.root
                 if let url = node.url {
-                    if let index = candidate.entries.firstIndex(where: { $0.id == id }) {
+                    if let index = entryIndices[id] {
                         candidate.entries[index].name = node.title; candidate.entries[index].location = url; candidate.entries[index].collectionID = parent
-                    } else { var entry = LibraryEntry(name: node.title, location: url, kind: .url, collectionID: parent); entry.id = id; candidate.entries.append(entry) }
-                } else if let index = candidate.collections.firstIndex(where: { $0.id == id }) {
+                    } else { var entry = LibraryEntry(name: node.title, location: url, kind: .url, collectionID: parent); entry.id = id; entryIndices[id] = candidate.entries.count; candidate.entries.append(entry) }
+                } else if let index = collectionIndices[id] {
                     candidate.collections[index].name = node.title; candidate.collections[index].parentID = parent
-                } else { var folder = LibraryCollection(name: node.title, parentID: parent); folder.id = id; candidate.collections.append(folder) }
+                } else { var folder = LibraryCollection(name: node.title, parentID: parent); folder.id = id; collectionIndices[id] = candidate.collections.count; candidate.collections.append(folder) }
             } else if now[key] != nil {
-                candidate.entries.removeAll { $0.id == id }
-                candidate.collections.removeAll { $0.id == id }
-                // Local-only files and folders retain their references if a browser folder disappears.
-                for index in candidate.entries.indices where candidate.entries[index].collectionID == id { candidate.entries[index].collectionID = state.root }
-                for index in candidate.collections.indices where candidate.collections[index].parentID == id { candidate.collections[index].parentID = state.root }
+                removed.insert(id)
             }
+        }
+        if !removed.isEmpty {
+            candidate.entries.removeAll { removed.contains($0.id) }
+            candidate.collections.removeAll { removed.contains($0.id) }
+            // Local-only items survive removal of their browser folder.
+            for index in candidate.entries.indices where candidate.entries[index].collectionID.map(removed.contains) == true { candidate.entries[index].collectionID = state.root }
+            for index in candidate.collections.indices where candidate.collections[index].parentID.map(removed.contains) == true { candidate.collections[index].parentID = state.root }
         }
         let remote = remap(desired, created: created)
         state.baseline = remote // Carry browser-controlled folder flags into the local projection.
@@ -198,7 +223,7 @@ struct VivaldiPending: Codable {
     var browser: [VivaldiNode]
     var desired: [VivaldiNode]
 }
-struct VivaldiResponse: Codable {
+struct VivaldiResponse: Codable, Sendable {
     var status: String
     var message: String
     var transaction: UUID?

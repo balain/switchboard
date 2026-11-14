@@ -5,6 +5,25 @@ final class VivaldiSyncTests: XCTestCase {
     private func node(_ id: String = "10", title: String = "Example", parent: String? = nil, url: String? = "https://example.com", locked: Bool = false) -> VivaldiNode {
         VivaldiNode(id: id, title: title, parent: parent, url: url, locked: locked)
     }
+    func testValidWebAddressesNeedNotMatchFoundationsSerializedSpelling() throws {
+        for address in ["https://example.com/a file.pdf", "https://example.com/Ω?q=hello world", "https://例え.テスト/資料", "HTTP://EXAMPLE.COM/report|draft"] {
+            let value = node(url: address)
+            try VivaldiGraph.validate([value], source: "Vivaldi")
+            XCTAssertEqual(try VivaldiGraph.merge(base: [], local: [], browser: [value], choices: [:]).desired.first?.url, address)
+        }
+    }
+    func testAddressErrorsIdentifyBookmarksAndFoldersWithoutLeakingCredentials() throws {
+        let folder = node("1", title: "Research", url: nil)
+        let malformed = node("2", title: "Broken report", parent: "1", url: "https://user:private-password@?token=private-token")
+        let unsupported = node("3", title: "Internal page", parent: "1", url: "vivaldi://settings")
+        XCTAssertThrowsError(try VivaldiGraph.validate([folder, malformed, unsupported], source: "Vivaldi")) { error in
+            let message = error.localizedDescription
+            XCTAssertTrue(message.contains("Vivaldi")); XCTAssertTrue(message.contains("Research / Broken report"))
+            XCTAssertTrue(message.contains("Research / Internal page")); XCTAssertTrue(message.contains("malformed web address"))
+            XCTAssertFalse(message.contains("private-password")); XCTAssertFalse(message.contains("private-token"))
+        }
+        XCTAssertThrowsError(try VivaldiGraph.validate([node(url: "example.com")]))
+    }
     func testThreeWayMergeHandlesIndependentEditsAndDeletion() throws {
         let original = node(), folder = node("20", title: "Folder", url: nil)
         let local = node(title: "Local rename"), browser = node("30", title: "Browser addition")
