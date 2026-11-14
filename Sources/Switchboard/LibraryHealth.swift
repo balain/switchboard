@@ -31,10 +31,23 @@ struct HealthFinding: Identifiable, Sendable {
 }
 
 enum LocalHealthProbe {
+    static func isTrashed(_ url: URL, originalLocation: String) -> Bool {
+        let originalComponents = URL(fileURLWithPath: originalLocation).standardizedFileURL.pathComponents
+        if originalComponents.contains(".Trash") || originalComponents.contains(".Trashes") { return false }
+        var relationship: FileManager.URLRelationship = .other
+        if (try? FileManager.default.getRelationship(&relationship, of: .trashDirectory, in: .userDomainMask, toItemAt: url)) != nil,
+           relationship == .contains {
+            return true
+        }
+        let components = url.standardizedFileURL.pathComponents
+        return components.contains(".Trash") || components.contains(".Trashes")
+    }
     static func url(for entry: LibraryEntry) -> URL {
         if let bookmark = entry.bookmark {
             var stale = false
-            if let resolved = try? URL(resolvingBookmarkData: bookmark, options: [.withoutUI, .withoutMounting], relativeTo: nil, bookmarkDataIsStale: &stale), resolved.isFileURL { return resolved }
+            if let resolved = try? URL(resolvingBookmarkData: bookmark, options: [.withoutUI, .withoutMounting], relativeTo: nil, bookmarkDataIsStale: &stale),
+               resolved.isFileURL,
+               !isTrashed(resolved, originalLocation: entry.location) { return resolved }
         }
         return URL(fileURLWithPath: entry.location)
     }

@@ -102,4 +102,19 @@ final class LauncherTests: XCTestCase {
         XCTAssertFalse(LauncherShortcut(keyCode: 49, control: false, option: true).valid)
         XCTAssertFalse(LauncherShortcut(keyCode: 999).valid)
     }
+    @MainActor func testOpeningMissingEntryFromLauncherRequestsLibraryWindow() throws {
+        let suite = UUID().uuidString; let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = LibraryStore(storageURL: dir.appendingPathComponent("library.json"))
+        let missing = LibraryEntry(name: "Gone", location: dir.appendingPathComponent("gone.txt").path, kind: .file)
+        store.data.entries = [missing]; XCTAssertTrue(store.save())
+        let launcher = QuickLauncherCoordinator(store: store, defaults: defaults, hotKey: FakeHotKey())
+        var requested = 0; launcher.openLibrary = { requested += 1 }
+        launcher.selectedID = missing.id
+        launcher.open()
+        XCTAssertEqual(store.missingEntry?.id, missing.id)
+        XCTAssertEqual(requested, 1)
+    }
 }
